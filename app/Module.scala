@@ -1,9 +1,8 @@
 import javax.inject._
-
 import com.google.inject.AbstractModule
 import net.codingwell.scalaguice.ScalaModule
 import play.api.{Configuration, Environment}
-import v1.post._
+import resource.clue.{PostRepository, PostRepositoryImpl}
 
 /**
   * Sets up custom components for Play.

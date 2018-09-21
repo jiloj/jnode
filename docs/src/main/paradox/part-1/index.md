@@ -18,9 +18,9 @@ We'll start off with a REST API that displays information for blog posts.  Users
 
 ## Modelling a Post Resource
 
-The way to do this in REST is to model the represented state as a resource.  A blog post resource will have a unique id, a URL hyperlink that indicates the canonical location of the resource, the title of the blog post, and the body of the blog post.
+The way to do this in REST is to model the represented state as a model.resource.  A blog post model.resource will have a unique id, a URL hyperlink that indicates the canonical location of the model.resource, the title of the blog post, and the body of the blog post.
 
-This resource is represented as a single case class in the Play application [here](https://github.com/playframework/play-scala-rest-api-example/blob/2.6.x/app/v1/post/PostResourceHandler.scala#L13):
+This model.resource is represented as a single case class in the Play application [here](https://github.com/playframework/play-scala-rest-api-example/blob/2.6.x/app/v1/post/PostResourceHandler.scala#L13):
 
 ```scala
 case class PostResource(
@@ -31,7 +31,7 @@ case class PostResource(
 )
 ```
 
-This resource is mapped to and from JSON on the front end using Play, and is mapped to and from a persistent datastore on the backend using a handler.
+This model.resource is mapped to and from JSON on the front end using Play, and is mapped to and from a persistent datastore on the backend using a handler.
 
 Play handles HTTP routing and representation for the REST API and makes it easy to write a non-blocking, asynchronous API that is an order of magnitude more efficient than other web application frameworks.
 
@@ -45,7 +45,7 @@ GET    /               controllers.HomeController.index()
 
 This is useful for situations where a front end service is rendering HTML.  However, Play also contains a more powerful routing DSL that we will use for the REST API.
 
-For every HTTP request starting with `/v1/posts`, Play routes it to a dedicated `PostRouter` class to handle the Posts resource, through the [`conf/routes`](https://github.com/playframework/play-scala-rest-api-example/blob/2.6.x/conf/routes) file:
+For every HTTP request starting with `/v1/posts`, Play routes it to a dedicated `PostRouter` class to handle the Posts model.resource, through the [`conf/routes`](https://github.com/playframework/play-scala-rest-api-example/blob/2.6.x/conf/routes) file:
 
 ```
 ->     /v1/posts               v1.post.PostRouter
@@ -176,7 +176,7 @@ class PostController @Inject()(cc: PostControllerComponents)(implicit ec: Execut
 }
 ```
 
-Let's take `show` as an example.  Here, the action defines a workflow for a request that maps to a single resource, i.e. `GET /v1/posts/123`.
+Let's take `show` as an example.  Here, the action defines a workflow for a request that maps to a single model.resource, i.e. `GET /v1/posts/123`.
 
 ```scala
 def show(id: String): Action[AnyContent] = PostAction.async { implicit request =>
@@ -229,7 +229,7 @@ Here, the `process` action is an action wrapper, and `processJsonPost` does most
 
 Here, `form.bindFromRequest()` will map input from the HTTP request to a [`play.api.data.Form`](https://www.playframework.com/documentation/latest/api/scala/index.html#play.api.data.Form), and handles form validation and error reporting.
 
-If the `PostFormInput` passes validation, it's passed to the resource handler, using the `success` method.  If the form processing fails, then the `failure` method is called and the `FormError` is returned in JSON format.
+If the `PostFormInput` passes validation, it's passed to the model.resource handler, using the `success` method.  If the form processing fails, then the `failure` method is called and the `FormError` is returned in JSON format.
 
 ```scala
 private val form: Form[PostFormInput] = {
@@ -356,7 +356,7 @@ Now that we have a `PostRequest`, we can call "request.messagesApi" explicitly f
 
 The `PostResourceHandler` is responsible for converting backend data from a repository into a `PostResource`. We won't go into detail on the `PostRepository` details for now, only that it returns data in an backend-centric state.
 
-A REST resource has information that a backend repository does not -- it knows about the operations available on the resource, and contains URI information that a single backend may not have.  As such, we want to be able to change the representation that we use internally without changing the resource that we expose publicly.
+A REST model.resource has information that a backend repository does not -- it knows about the operations available on the model.resource, and contains URI information that a single backend may not have.  As such, we want to be able to change the representation that we use internally without changing the model.resource that we expose publicly.
 
 You can see the `PostResourceHandler` [here](https://github.com/playframework/play-scala-rest-api-example/blob/2.6.x/app/v1/post/PostResourceHandler.scala#L35-L66):
 
@@ -398,7 +398,7 @@ class PostResourceHandler @Inject()(
 
 }
 ```
-Here, it's a straight conversion in `createPostResource`, with the only hook being that the router provides the resource's URL, since it's something that `PostData` does not have itself.
+Here, it's a straight conversion in `createPostResource`, with the only hook being that the router provides the model.resource's URL, since it's something that `PostData` does not have itself.
 
 ## Rendering Content as JSON
 

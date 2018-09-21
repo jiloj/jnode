@@ -1,16 +1,15 @@
-package v1.post
+package resource.clue
 
 import javax.inject.{Inject, Provider}
-
 import play.api.MarkerContext
+import play.api.libs.json._
 
 import scala.concurrent.{ExecutionContext, Future}
-import play.api.libs.json._
 
 /**
   * DTO for displaying post information.
   */
-case class PostResource(id: String, link: String, title: String, body: String)
+case class PostResource(id: String, title: String, body: String)
 
 object PostResource {
 
@@ -21,7 +20,6 @@ object PostResource {
     def writes(post: PostResource): JsValue = {
       Json.obj(
         "id" -> post.id,
-        "link" -> post.link,
         "title" -> post.title,
         "body" -> post.body
       )
@@ -32,17 +30,9 @@ object PostResource {
 /**
   * Controls access to the backend data, returning [[PostResource]]
   */
-class PostResourceHandler @Inject()(
-    routerProvider: Provider[PostRouter],
+class ClueResourceHandler @Inject()(
+    routerProvider: Provider[ClueRouter],
     postRepository: PostRepository)(implicit ec: ExecutionContext) {
-
-  def create(postInput: PostFormInput)(implicit mc: MarkerContext): Future[PostResource] = {
-    val data = PostData(PostId("999"), postInput.title, postInput.body)
-    // We don't actually create the post, so return what we have
-    postRepository.create(data).map { id =>
-      createPostResource(data)
-    }
-  }
 
   def lookup(id: String)(implicit mc: MarkerContext): Future[Option[PostResource]] = {
     val postFuture = postRepository.get(PostId(id))
@@ -60,7 +50,7 @@ class PostResourceHandler @Inject()(
   }
 
   private def createPostResource(p: PostData): PostResource = {
-    PostResource(p.id.toString, routerProvider.get.link(p.id), p.title, p.body)
+    PostResource(p.id.toString, p.title, p.body)
   }
 
 }

@@ -1,4 +1,4 @@
-package v1.post
+package resource.clue
 
 import javax.inject.Inject
 
@@ -16,8 +16,8 @@ import scala.concurrent.{ExecutionContext, Future}
   * This is commonly used to hold request-specific information like
   * security credentials, and useful shortcut methods.
   */
-trait PostRequestHeader extends MessagesRequestHeader with PreferredMessagesProvider
-class PostRequest[A](request: Request[A], val messagesApi: MessagesApi) extends WrappedRequest(request) with PostRequestHeader
+trait ClueRequestHeader extends MessagesRequestHeader with PreferredMessagesProvider
+class ClueRequest[A](request: Request[A], val messagesApi: MessagesApi) extends WrappedRequest(request) with ClueRequestHeader
 
 /**
  * Provides an implicit marker that will show the request in all logger statements.
@@ -40,31 +40,31 @@ trait RequestMarkerContext {
 }
 
 /**
-  * The action builder for the Post resource.
+  * The action builder for the Post model.resource.
   *
   * This is the place to put logging, metrics, to augment
   * the request with contextual data, and manipulate the
   * result.
   */
-class PostActionBuilder @Inject()(messagesApi: MessagesApi, playBodyParsers: PlayBodyParsers)
+class ClueActionBuilder @Inject()(messagesApi: MessagesApi, playBodyParsers: PlayBodyParsers)
                                  (implicit val executionContext: ExecutionContext)
-    extends ActionBuilder[PostRequest, AnyContent]
+    extends ActionBuilder[ClueRequest, AnyContent]
     with RequestMarkerContext
     with HttpVerbs {
 
   override val parser: BodyParser[AnyContent] = playBodyParsers.anyContent
 
-  type PostRequestBlock[A] = PostRequest[A] => Future[Result]
+  type ClueRequestBlock[A] = ClueRequest[A] => Future[Result]
 
   private val logger = Logger(this.getClass)
 
   override def invokeBlock[A](request: Request[A],
-                              block: PostRequestBlock[A]): Future[Result] = {
+                              block: ClueRequestBlock[A]): Future[Result] = {
     // Convert to marker context and use request in block
     implicit val markerContext: MarkerContext = requestHeaderToMarkerContext(request)
     logger.trace(s"invokeBlock: ")
 
-    val future = block(new PostRequest(request, messagesApi))
+    val future = block(new ClueRequest(request, messagesApi))
 
     future.map { result =>
       request.method match {
@@ -83,23 +83,23 @@ class PostActionBuilder @Inject()(messagesApi: MessagesApi, playBodyParsers: Pla
  * This is a good way to minimize the surface area exposed to the controller, so the
  * controller only has to have one thing injected.
  */
-case class PostControllerComponents @Inject()(postActionBuilder: PostActionBuilder,
-                                               postResourceHandler: PostResourceHandler,
-                                               actionBuilder: DefaultActionBuilder,
-                                               parsers: PlayBodyParsers,
-                                               messagesApi: MessagesApi,
-                                               langs: Langs,
-                                               fileMimeTypes: FileMimeTypes,
-                                               executionContext: scala.concurrent.ExecutionContext)
+case class ClueControllerComponents @Inject()(clueActionBuilder: ClueActionBuilder,
+                                              clueResourceHandler: ClueResourceHandler,
+                                              actionBuilder: DefaultActionBuilder,
+                                              parsers: PlayBodyParsers,
+                                              messagesApi: MessagesApi,
+                                              langs: Langs,
+                                              fileMimeTypes: FileMimeTypes,
+                                              executionContext: scala.concurrent.ExecutionContext)
   extends ControllerComponents
 
 /**
  * Exposes actions and handler to the PostController by wiring the injected state into the base class.
  */
-class PostBaseController @Inject()(pcc: PostControllerComponents) extends BaseController with RequestMarkerContext {
-  override protected def controllerComponents: ControllerComponents = pcc
+class ClueBaseController @Inject()(clueControllerComponents: ClueControllerComponents) extends BaseController with RequestMarkerContext {
+  override protected def controllerComponents: ControllerComponents = clueControllerComponents
 
-  def PostAction: PostActionBuilder = pcc.postActionBuilder
+  def ClueAction: ClueActionBuilder = clueControllerComponents.clueActionBuilder
 
-  def postResourceHandler: PostResourceHandler = pcc.postResourceHandler
+  def clueResourceHandler: ClueResourceHandler = clueControllerComponents.clueResourceHandler
 }

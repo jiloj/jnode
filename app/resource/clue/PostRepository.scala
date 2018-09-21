@@ -1,4 +1,4 @@
-package v1.post
+package resource.clue
 
 import javax.inject.{Inject, Singleton}
 
