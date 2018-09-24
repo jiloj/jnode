@@ -22,7 +22,7 @@ object PostId {
 }
 
 
-class PostExecutionContext @Inject()(actorSystem: ActorSystem) extends CustomExecutionContext(actorSystem, "repository.dispatcher")
+class PostExecutionContext @Inject()(actorSystem: ActorSystem) extends CustomExecutionContext(actorSystem, "resource.dispatcher")
 
 /**
   * A pure non-blocking interface for the PostRepository.

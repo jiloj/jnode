@@ -1,16 +1,34 @@
-package model
+package model.dao
 
+import javax.inject.Inject
+import model.base.CategoryShow
+import play.api.db.slick.{DatabaseConfigProvider, HasDatabaseConfigProvider}
+import slick.jdbc.JdbcProfile
 import slick.jdbc.MySQLProfile.api._
 
+import scala.concurrent.Future
+
 /**
-  * A relationship between a category and a show. A category appears on a show in a specific round, and this captures
-  * that information.
   *
-  * @param round The round the category appeared in. 1, 2, or 3 for single, double, or final jeopardy respectively.
-  * @param categoryid The id of the category.
-  * @param showid The id of the show in which the category appeared.
+  * @param dbConfigProvider
+  * @param ec
   */
-case class CategoryShow(round: Int, categoryid: Int, showid: Int)
+class CategoryShowDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)(implicit ec: ResourceExecutionContext)
+  extends ResourceDAO[CategoryShow]
+    with HasDatabaseConfigProvider[JdbcProfile]
+    with InsertableDAO[CategoryShow] {
+  private val InsertCategoryShowQuery = CategoryShows returning CategoryShows
+
+  /**
+    *
+    * @param cs
+    * @return A future that resolves with nothing when the operation is complete.
+    */
+  def insert(cs: CategoryShow): Future[CategoryShow] = {
+    val query = InsertCategoryShowQuery += cs
+    db.run(query)
+  }
+}
 
 /**
   * A schema for the relationship between category and show. The triplet should be unique across all three fields.
