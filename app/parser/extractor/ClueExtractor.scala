@@ -5,16 +5,15 @@ import net.ruippeixotog.scalascraper.browser.JsoupBrowser
 import net.ruippeixotog.scalascraper.dsl.DSL.Extract._
 import net.ruippeixotog.scalascraper.dsl.DSL._
 import net.ruippeixotog.scalascraper.model.Element
-import play.api.Logger
 
 /**
   * Extract the clues from a j-archive round html element. These clues are extracted in order where the principal axis
   * is horizontal.
   */
 object ClueExtractor extends Extractor[Seq[Option[Clue]]] {
-  private val logger = Logger(getClass)
   private val browser = new JsoupBrowser()
-  private val answerJSExtractor = "toggle\\('clue_J_[1-6]_[1-5]', 'clue_J_[1-6]_[1-5]_stuck', '(.+)'\\)".r
+  // TODO: Make this more stringent or evaluate it's precision and recall
+  private val answerJSExtractor = "toggle\\('clue_.?J.*?', 'clue_.?J.*?', '(.+)'\\)".r
 
   /**
     * Extract the clues from the round. The clues are in order first going horizontally and then vertically. Clues may
@@ -25,8 +24,33 @@ object ClueExtractor extends Extractor[Seq[Option[Clue]]] {
     */
   def extract(el: Element): Seq[Option[Clue]] = {
     // TODO: I'm assuming these are returned in order of the document.
-    val clueNodes = el >> "td.clue"
-    clueNodes.zipWithIndex.map(nodeToPossibleClue).toIndexedSeq
+    val roundType = RoundTypeExtractor.extract(el)
+
+    if (roundType != 3) {
+      val clueNodes = el >> "td.clue"
+      clueNodes.zipWithIndex.map(nodeToPossibleClue).toIndexedSeq
+    } else {
+      finalRoundToPossibleClue(el)
+    }
+  }
+
+  private def finalRoundToPossibleClue(el: Element): Seq[Option[Clue]] = {
+    val question = el >?> text("#clue_fj")
+    val answerJS = el >?> attr("onmouseover")("div[onmouseover][onclick]")
+
+    val clue = for {
+      q <- question
+      js <- answerJS
+      mat <- answerJSExtractor.findFirstMatchIn(js)
+
+      answerHtml = mat.group(1)
+      answerDoc = browser.parseString(answerHtml)
+      a <- answerDoc >?> text(".correct_response")
+    } yield {
+      Clue(q, a, 0, -1)
+    }
+
+    Seq(clue)
   }
 
   /**
@@ -54,7 +78,7 @@ object ClueExtractor extends Extractor[Seq[Option[Clue]]] {
     } yield {
       val v = (idx / 6) + 1
 
-      Clue(q, a.get, v, round)
+      Clue(q, a, v, round)
     }
   }
 }

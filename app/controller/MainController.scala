@@ -62,17 +62,19 @@ class MainController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Ca
       (extractedRound, idx) <- extractedRounds.zipWithIndex
       round <- extractedRound
     } yield {
+      logger.debug(idx.toString())
+      println(idx)
       // Extract all the info from the web page.
       val categoriesOpen = CategoryExtractor.extract(round)
       val cluesOpen = ClueExtractor.extract(round)
 
       val categoriesResult = insertCategories(categoriesOpen)
 
-      for {
-        show <- showResult
-      } yield {
+      showResult.flatMap { show =>
         val clueInserts = insertClues(cluesOpen, categoriesResult, idx + 1, show).flatten
         val csInserts = insertCategoryShows(categoriesResult.values, show)
+
+        Future.sequence(clueInserts ++ csInserts)
       }
     }
 
@@ -132,7 +134,8 @@ class MainController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Ca
 
   // TODO: Should this take iterable of future, or iterable of category.
   // TODO: Make all methods parallel in returning something.
-  private def insertCategoryShows(categoryResults: Iterable[Future[Category]], show: Show): Iterable[Future[CategoryShow]] = {
+  private def insertCategoryShows(categoryResults: Iterable[Future[Category]], show: Show): Iterable[Future[Unit]] = {
+    logger.trace("here")
     categoryResults.map { category =>
       category.flatMap { result =>
         val cs = CategoryShow(1, result.id, show.id)

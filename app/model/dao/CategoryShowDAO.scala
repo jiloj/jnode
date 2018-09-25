@@ -15,18 +15,15 @@ import scala.concurrent.Future
   */
 class CategoryShowDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)(implicit ec: ResourceExecutionContext)
   extends ResourceDAO[CategoryShow]
-    with HasDatabaseConfigProvider[JdbcProfile]
-    with InsertableDAO[CategoryShow] {
-  private val InsertCategoryShowQuery = CategoryShows returning CategoryShows
-
+    with HasDatabaseConfigProvider[JdbcProfile] {
   /**
     *
     * @param cs
     * @return A future that resolves with nothing when the operation is complete.
     */
-  def insert(cs: CategoryShow): Future[CategoryShow] = {
-    val query = InsertCategoryShowQuery += cs
-    db.run(query)
+  def insert(cs: CategoryShow): Future[Unit] = {
+    val query = CategoryShows += cs
+    db.run(query).map { _ => () }
   }
 }
 
