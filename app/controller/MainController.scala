@@ -6,9 +6,11 @@ import model.dao._
 import net.ruippeixotog.scalascraper.browser.JsoupBrowser
 import net.ruippeixotog.scalascraper.model.Document
 import parser.extractor.{CategoryExtractor, ClueExtractor, ExtractorUtils, ShowExtractor}
+import parser.validator.PageValidator
 import play.api.Logger
 import play.api.mvc.{AbstractController, Action, AnyContent, ControllerComponents}
 
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
@@ -32,12 +34,32 @@ class MainController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Ca
     val creationResult = appDAO.create()
     val browser = new JsoupBrowser()
 
-    for {
-      _ <- creationResult
-      page = browser.get("http://j-archive.com/showgame.php?game_id=1")
-      _ <- processPage(page)
-    } yield {
-      Ok("Complete")
+    creationResult.flatMap { _ =>
+      // TODO: I feel like this may be able to be more functional
+      var i = 1
+      var validPage = true
+      val processResults: mutable.Seq[Future[Unit]] = mutable.Seq.empty[Future[Unit]]
+
+      while (validPage) {
+        val page = browser.get(s"http://j-archive.com/showgame.php?game_id=$i")
+        if (PageValidator.valid(page.root)) {
+          val execution = processPage(page)
+
+          processResults.+:(execution)
+
+          i += 1
+        } else {
+          validPage = false
+        }
+
+        if (i > 10) {
+          validPage = false
+        }
+      }
+
+      Future.sequence(processResults).map { _ =>
+        Ok("Complete")
+      }
     }
   }
 
@@ -62,8 +84,6 @@ class MainController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Ca
       (extractedRound, idx) <- extractedRounds.zipWithIndex
       round <- extractedRound
     } yield {
-      logger.debug(idx.toString())
-      println(idx)
       // Extract all the info from the web page.
       val categoriesOpen = CategoryExtractor.extract(round)
       val cluesOpen = ClueExtractor.extract(round)
@@ -119,7 +139,6 @@ class MainController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Ca
                           show: Show): Iterable[Option[Future[Clue]]] = {
     clues.zipWithIndex.map { case (clueOpt, idx) =>
       clueOpt.flatMap { clue =>
-        logger.trace(clue.question)
         val possibleFuture = categories.get(idx % 6)
 
         possibleFuture.map { future =>
@@ -135,7 +154,6 @@ class MainController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Ca
   // TODO: Should this take iterable of future, or iterable of category.
   // TODO: Make all methods parallel in returning something.
   private def insertCategoryShows(categoryResults: Iterable[Future[Category]], show: Show): Iterable[Future[Unit]] = {
-    logger.trace("here")
     categoryResults.map { category =>
       category.flatMap { result =>
         val cs = CategoryShow(1, result.id, show.id)

@@ -15,6 +15,7 @@ object ClueExtractor extends Extractor[Seq[Option[Clue]]] {
   // TODO: Make this more stringent or evaluate it's precision and recall
   private val answerJSExtractor = "toggle\\('clue_.?J.*?', 'clue_.?J.*?', '(.+)'\\)".r
 
+  // TODO: I do not currently extract any tie-breaker questions.
   /**
     * Extract the clues from the round. The clues are in order first going horizontally and then vertically. Clues may
     * not exist as well.
@@ -34,8 +35,13 @@ object ClueExtractor extends Extractor[Seq[Option[Clue]]] {
     }
   }
 
+  /**
+    *
+    * @param el
+    * @return
+    */
   private def finalRoundToPossibleClue(el: Element): Seq[Option[Clue]] = {
-    val question = el >?> text("#clue_fj")
+    val question = el >?> text("#clue_FJ")
     val answerJS = el >?> attr("onmouseover")("div[onmouseover][onclick]")
 
     val clue = for {
@@ -44,13 +50,14 @@ object ClueExtractor extends Extractor[Seq[Option[Clue]]] {
       mat <- answerJSExtractor.findFirstMatchIn(js)
 
       answerHtml = mat.group(1)
-      answerDoc = browser.parseString(answerHtml)
-      a <- answerDoc >?> text(".correct_response")
+      clean = cleanAnswer(answerHtml)
+      answerDoc = browser.parseString(clean)
+      a <- answerDoc >?> text("em[class]")
     } yield {
       Clue(q, a, 0, -1)
     }
 
-    Seq(clue)
+    IndexedSeq(clue)
   }
 
   /**
@@ -73,12 +80,29 @@ object ClueExtractor extends Extractor[Seq[Option[Clue]]] {
       mat <- answerJSExtractor.findFirstMatchIn(js)
 
       answerHtml = mat.group(1)
-      answerDoc = browser.parseString(answerHtml)
-      a <- answerDoc >?> text(".correct_response")
+      clean = cleanAnswer(answerHtml)
+      answerDoc = browser.parseString(clean)
+      a <- answerDoc >?> text("em[class]")
     } yield {
       val v = (idx / 6) + 1
 
       Clue(q, a, v, round)
     }
+  }
+
+  /**
+    * Clean up the answer value for extra html content.
+    *
+    * @param ans The answer value to clean up.
+    * @return The cleaned up answer content.
+    */
+  private def cleanAnswer(ans: String): String = {
+    val replaced = ans.replace("&lt;", "<")
+    val firstTemp = replaced.indexOf("<")
+    val firstBracket = if (firstTemp < 0) 0 else firstTemp
+    val lastTemp = replaced.lastIndexOf(">")
+    val lastBracket = if (lastTemp < 0) ans.length else lastTemp
+
+    replaced.slice(firstBracket, lastBracket)
   }
 }

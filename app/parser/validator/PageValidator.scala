@@ -15,7 +15,7 @@ object PageValidator extends Validator {
     * @return True if the element is a valid j-archive page, and false otherwise.
     */
   def valid(el: Element): Boolean = {
-    val result = el >/~ validator(text("title"))(_ == "Test page")
-    result.isRight
+    val result = el >/~ validator(text("div#content p.error"))(_.toLowerCase().contains("error: no game"))
+    result.isLeft
   }
 }
