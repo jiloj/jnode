@@ -6,14 +6,15 @@ import play.api.routing.SimpleRouter
 import play.api.routing.sird._
 
 /**
-  * Routes and URLs to the PostResource controller.
+  * Routes the different url requests to controller actions. The available actions are to list everything and to get a
+  * specific clue.
   */
 class ClueRouter @Inject()(controller: ClueController) extends SimpleRouter {
   override def routes: Routes = {
     case GET(p"/") =>
       controller.index
 
-    case GET(p"/$id") =>
+    case GET(p"/${int(id)}") =>
       controller.show(id)
   }
 }

@@ -14,8 +14,7 @@ import scala.concurrent.Future
   * @param ec
   */
 class CategoryShowDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)(implicit ec: ResourceExecutionContext)
-  extends ResourceDAO[CategoryShow]
-    with HasDatabaseConfigProvider[JdbcProfile] {
+  extends HasDatabaseConfigProvider[JdbcProfile] {
   /**
     *
     * @param cs

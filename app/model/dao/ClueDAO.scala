@@ -14,10 +14,10 @@ import scala.concurrent.Future
   * @param ec
   */
 class ClueDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)(implicit ec: ResourceExecutionContext)
-  extends ResourceDAO[Clue]
-    with HasDatabaseConfigProvider[JdbcProfile]
+  extends HasDatabaseConfigProvider[JdbcProfile]
     with InsertableDAO[Clue]
-    with LookupableDAO[Clue] {
+    with LookupableDAO[Clue]
+    with AllDAO[Clue] {
   private val InsertClueQuery = Clues returning Clues.map(_.id) into ((clue, id) => clue.copy(id=id))
 
   /**
@@ -38,6 +38,15 @@ class ClueDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)(
   def lookup(id: Int): Future[Option[Clue]] = {
     val query = Clues.filter(_.id === id).take(1).result.headOption
     db.run(query)
+  }
+
+  /**
+    *
+    * @return
+    */
+  // TODO: This might be kinda large, will have to see about this.
+  def all: Future[Iterable[Clue]] = {
+    db.run(Clues.result)
   }
 }
 

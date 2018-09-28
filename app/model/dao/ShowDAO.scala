@@ -17,8 +17,7 @@ import scala.concurrent.Future
   * @param ec
   */
 class ShowDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)(implicit ec: ResourceExecutionContext)
-  extends ResourceDAO[Show]
-    with HasDatabaseConfigProvider[JdbcProfile]
+  extends HasDatabaseConfigProvider[JdbcProfile]
     with InsertableDAO[Show]
     with LookupableDAO[Show] {
   private val InsertShowQuery = Shows returning Shows.map(_.id) into ((show, id) => show.copy(id=id))

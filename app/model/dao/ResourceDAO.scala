@@ -46,12 +46,7 @@ trait LookupableDAO[A] {
   def lookup(id: Int): Future[Option[A]]
 }
 
-// TODO: Dependency injection information should ideally go on this.
-// TODO: Do I still need this.
-/**
-  * A base class for DAO that relates to application resources. This includes, clues, categories, and so on and is the
-  * basic functionality a DAO should provide for a resource.
-  *
-  * @tparam A The resource type this DAO interfaces with from the persistence layer.
-  */
-abstract class ResourceDAO[A] { }
+
+trait AllDAO[A] {
+  def all: Future[Iterable[A]]
+}

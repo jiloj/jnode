@@ -8,6 +8,8 @@ import play.api.http.{FileMimeTypes, HttpVerbs}
 import play.api.i18n.{Langs, MessagesApi}
 import play.api.mvc._
 
+import net.logstash.logback.marker.Markers
+
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
@@ -23,7 +25,6 @@ class ClueRequest[A](request: Request[A], val messagesApi: MessagesApi) extends 
  * Provides an implicit marker that will show the request in all logger statements.
  */
 trait RequestMarkerContext {
-  import net.logstash.logback.marker.Markers
 
   private def marker(tuple: (String, Any)) = Markers.append(tuple._1, tuple._2)
 
@@ -56,13 +57,13 @@ class ClueActionBuilder @Inject()(messagesApi: MessagesApi, playBodyParsers: Pla
 
   type ClueRequestBlock[A] = ClueRequest[A] => Future[Result]
 
-  private val logger = Logger(this.getClass)
+  private val logger = Logger(getClass)
 
   override def invokeBlock[A](request: Request[A],
                               block: ClueRequestBlock[A]): Future[Result] = {
     // Convert to marker context and use request in block
     implicit val markerContext: MarkerContext = requestHeaderToMarkerContext(request)
-    logger.trace(s"invokeBlock: ")
+    logger.trace(s"ClueActionBuilder#invokeBlock: ")
 
     val future = block(new ClueRequest(request, messagesApi))
 
@@ -78,10 +79,8 @@ class ClueActionBuilder @Inject()(messagesApi: MessagesApi, playBodyParsers: Pla
 }
 
 /**
- * Packages up the component dependencies for the post controller.
- *
- * This is a good way to minimize the surface area exposed to the controller, so the
- * controller only has to have one thing injected.
+ * Packages up the component dependencies for the clue controller. This minimizes the surface area exposed to the
+  * controller, so the controller only has to have one thing injected.
  */
 case class ClueControllerComponents @Inject()(clueActionBuilder: ClueActionBuilder,
                                               clueResourceHandler: ClueResourceHandler,
@@ -94,9 +93,10 @@ case class ClueControllerComponents @Inject()(clueActionBuilder: ClueActionBuild
   extends ControllerComponents
 
 /**
- * Exposes actions and handler to the PostController by wiring the injected state into the base class.
+ * Exposes actions and handler to the ClueController by wiring the injected state into the base class.
  */
-class ClueBaseController @Inject()(clueControllerComponents: ClueControllerComponents) extends BaseController with RequestMarkerContext {
+class ClueBaseController @Inject()(clueControllerComponents: ClueControllerComponents) extends BaseController
+  with RequestMarkerContext {
   override protected def controllerComponents: ControllerComponents = clueControllerComponents
 
   def ClueAction: ClueActionBuilder = clueControllerComponents.clueActionBuilder

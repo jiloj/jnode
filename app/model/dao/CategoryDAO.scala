@@ -15,8 +15,7 @@ import scala.concurrent.Future
   */
 class CategoryDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)
                            (implicit ec: ResourceExecutionContext)
-  extends ResourceDAO[Category]
-    with HasDatabaseConfigProvider[JdbcProfile]
+    extends HasDatabaseConfigProvider[JdbcProfile]
     with InsertableDAO[Category]
     with LookupableDAO[Category] {
   private val InsertCategoryQuery = (Categories returning Categories.map(_.id)
