@@ -1,9 +1,9 @@
-package resource.category
+package resource.show
 
 import javax.inject.Inject
 import play.api.Logger
 import play.api.libs.json.Json
-import play.api.mvc._
+import play.api.mvc.{Action, AnyContent}
 
 import scala.concurrent.ExecutionContext
 
@@ -11,8 +11,8 @@ import scala.concurrent.ExecutionContext
   * Defines the logic for the actions that can be done on the clue resource.
   */
 // TODO: Can do better error handling here with future results.
-class CategoryController @Inject()(cc: CategoryControllerComponents)(implicit ec: ExecutionContext)
-  extends CategoryBaseController(cc) {
+class ShowController @Inject()(cc: ShowControllerComponents)(implicit ec: ExecutionContext)
+  extends ShowBaseController(cc) {
   private val logger = Logger(getClass)
 
   /**
@@ -21,9 +21,9 @@ class CategoryController @Inject()(cc: CategoryControllerComponents)(implicit ec
     * @return The json result of all the category resources.
     */
   def index: Action[AnyContent] = ResourceAction.async { implicit request =>
-    logger.trace("CategoryController#index")
-    resourceHandler.all.map { categories =>
-      Ok(Json.toJson(categories))
+    logger.trace("ShowController#index")
+    resourceHandler.all.map { shows =>
+      Ok(Json.toJson(shows))
     }
   }
 
@@ -35,8 +35,8 @@ class CategoryController @Inject()(cc: CategoryControllerComponents)(implicit ec
     */
   def show(id: Int): Action[AnyContent] = ResourceAction.async { implicit request =>
     logger.trace(s"CategoryController#show: id = $id")
-    resourceHandler.lookup(id).map { category =>
-      Ok(Json.toJson(category))
+    resourceHandler.lookup(id).map { show =>
+      Ok(Json.toJson(show))
     }
   }
 }

@@ -4,7 +4,6 @@ import javax.inject.Inject
 import play.api.Logger
 import play.api.libs.json.Json
 import play.api.mvc._
-import resource.ResourceHandler
 
 import scala.concurrent.ExecutionContext
 

@@ -18,9 +18,18 @@ import scala.concurrent.Future
   */
 class ShowDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)(implicit ec: ResourceExecutionContext)
   extends HasDatabaseConfigProvider[JdbcProfile]
+    with AllDAO[Show]
     with InsertableDAO[Show]
     with LookupableDAO[Show] {
   private val InsertShowQuery = Shows returning Shows.map(_.id) into ((show, id) => show.copy(id=id))
+
+  /**
+    *
+    * @return
+    */
+  def all: Future[Iterable[Show]] = {
+    db.run(Shows.result)
+  }
 
   /**
     * Insert a given show into the persistence layer.

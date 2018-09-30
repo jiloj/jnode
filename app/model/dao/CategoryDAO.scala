@@ -16,10 +16,20 @@ import scala.concurrent.Future
 class CategoryDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)
                            (implicit ec: ResourceExecutionContext)
     extends HasDatabaseConfigProvider[JdbcProfile]
+    with AllDAO[Category]
     with InsertableDAO[Category]
     with LookupableDAO[Category] {
   private val InsertCategoryQuery = (Categories returning Categories.map(_.id)
     into ((category, id) => category.copy(id=id)))
+
+  /**
+    *
+    * @return
+    */
+  // TODO: This might be kinda large, will have to see about this.
+  def all: Future[Iterable[Category]] = {
+    db.run(Categories.result)
+  }
 
   /**
     *
