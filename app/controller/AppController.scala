@@ -18,9 +18,9 @@ import scala.concurrent.{ExecutionContext, Future}
   * @param dbConfigProvider
   * @param cc
   */
-class MainController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: CategoryDAO, clueDAO: ClueDAO,
-                               categoryShowDAO: CategoryShowDAO, cc: ControllerComponents)
-                              (implicit ec: ExecutionContext) extends AbstractController(cc) {
+class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: CategoryDAO, clueDAO: ClueDAO,
+                              categoryShowDAO: CategoryShowDAO, cc: ControllerComponents)
+                             (implicit ec: ExecutionContext) extends AbstractController(cc) {
   private val logger = Logger(getClass)
 
   /**

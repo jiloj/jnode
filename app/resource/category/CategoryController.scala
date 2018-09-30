@@ -1,19 +1,19 @@
-package resource.clue
+package resource.category
 
 import javax.inject.Inject
 import play.api.Logger
 import play.api.libs.json.Json
 import play.api.mvc._
-import resource.ResourceHandler
 
 import scala.concurrent.ExecutionContext
 
-// TODO: Can do better error handling here with future results.
+/*
 /**
   * Defines the logic for the actions that can be done on the clue resource.
   */
-class ClueController @Inject()(cc: ClueControllerComponents)(implicit ec: ExecutionContext)
-    extends ClueBaseController(cc) {
+// TODO: Can do better error handling here with future results.
+class CategoryController @Inject()(cc: CategoryControllerComponents)(implicit ec: ExecutionContext)
+  extends CategoryBaseController(cc) {
   private val logger = Logger(getClass)
 
   /**
@@ -21,9 +21,9 @@ class ClueController @Inject()(cc: ClueControllerComponents)(implicit ec: Execut
     *
     * @return The json result of all the clue resources.
     */
-  def index: Action[AnyContent] = ResourceAction.async { implicit request =>
+  def index: Action[AnyContent] = CategoryAction.async { implicit request =>
     logger.trace("ClueController#index")
-    resourceHandler.all.map { clues =>
+    clueResourceHandler.all.map { clues =>
       Ok(Json.toJson(clues))
     }
   }
@@ -34,10 +34,11 @@ class ClueController @Inject()(cc: ClueControllerComponents)(implicit ec: Execut
     * @param id The id of the clue to retrieve.
     * @return The retrieved clue as json.
     */
-  def show(id: Int): Action[AnyContent] = ResourceAction.async { implicit request =>
+  def show(id: Int): Action[AnyContent] = CategoryAction.async { implicit request =>
     logger.trace(s"ClueController#show: id = $id")
-    resourceHandler.lookup(id).map { clue =>
+    clueResourceHandler.lookup(id).map { clue =>
       Ok(Json.toJson(clue))
     }
   }
 }
+*/

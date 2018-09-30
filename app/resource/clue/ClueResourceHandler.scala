@@ -44,9 +44,7 @@ object ClueResource {
   * Controls access to the backend data returning ClueResource handles that have been parsed and are apt for front-end
   * consumption.
   */
-class ClueResourceHandler @Inject()(
-    routerProvider: Provider[ClueRouter],
-    clueDAO: ClueDAO)(implicit ec: ExecutionContext) {
+class ClueResourceHandler @Inject()(clueDAO: ClueDAO)(implicit ec: ExecutionContext) {
   /**
     * Retrieve all the clues in the node.
     *
