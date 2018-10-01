@@ -7,9 +7,11 @@ import play.api.mvc._
 
 import scala.concurrent.ExecutionContext
 
-// TODO: Can do better error handling here with future results.
 /**
   * Defines the logic for the actions that can be done on the clue resource.
+  *
+  * @param cc The injected controller component dependencies.
+  * @param ec The implicit execution context.
   */
 class ClueController @Inject()(cc: ClueControllerComponents)(implicit ec: ExecutionContext)
     extends ClueBaseController(cc) {
@@ -21,7 +23,8 @@ class ClueController @Inject()(cc: ClueControllerComponents)(implicit ec: Execut
     * @return The json result of all the clue resources.
     */
   def index: Action[AnyContent] = ResourceAction.async { implicit request =>
-    logger.trace("ClueController#index")
+    logger.info("ClueController#index")
+
     resourceHandler.all.map { clues =>
       Ok(Json.toJson(clues))
     }
@@ -34,9 +37,13 @@ class ClueController @Inject()(cc: ClueControllerComponents)(implicit ec: Execut
     * @return The retrieved clue as json.
     */
   def show(id: Int): Action[AnyContent] = ResourceAction.async { implicit request =>
-    logger.trace(s"ClueController#show: id = $id")
-    resourceHandler.lookup(id).map { clue =>
-      Ok(Json.toJson(clue))
+    logger.info(s"ClueController#show: id = $id")
+
+    resourceHandler.lookup(id).map {
+      case Some(clue) => Ok(Json.toJson(clue))
+      case None => NotFound(
+        Json.obj("code" -> 404, "msg" -> "No clue resource exists with given id.")
+      )
     }
   }
 }

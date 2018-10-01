@@ -30,13 +30,12 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
     * @return An async action that resolves when the entire process is over.
     */
   def create: Action[AnyContent] = Action.async { implicit request =>
-    logger.trace("MainController#create")
+    logger.info("MainController#create")
+
     val creationResult = appDAO.create()
     val browser = new JsoupBrowser()
 
     creationResult.flatMap { _ =>
-      // TODO: I feel like this may be able to be more functional
-      var i = 1
       var validPage = true
       val processResults: mutable.Seq[Future[Unit]] = mutable.Seq.empty[Future[Unit]]
 
@@ -46,13 +45,7 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
           val execution = processPage(page)
 
           processResults.+:(execution)
-
-          i += 1
         } else {
-          validPage = false
-        }
-
-        if (i > 10) {
           validPage = false
         }
       }
