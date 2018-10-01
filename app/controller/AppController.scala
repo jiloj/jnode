@@ -1,5 +1,6 @@
 package controller
 
+import akka.actor.ActorSystem
 import javax.inject.Inject
 import model.base.{Category, CategoryShow, Clue, Show}
 import model.dao._
@@ -8,9 +9,10 @@ import net.ruippeixotog.scalascraper.model.Document
 import parser.extractor.{CategoryExtractor, ClueExtractor, ExtractorUtils, ShowExtractor}
 import parser.validator.PageValidator
 import play.api.Logger
+import play.api.libs.json.Json
 import play.api.mvc.{AbstractController, Action, AnyContent, ControllerComponents}
 
-import scala.collection.mutable
+import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
@@ -19,9 +21,17 @@ import scala.concurrent.{ExecutionContext, Future}
   * @param cc
   */
 class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: CategoryDAO, clueDAO: ClueDAO,
-                              categoryShowDAO: CategoryShowDAO, cc: ControllerComponents)
+                              categoryShowDAO: CategoryShowDAO, actorSystem: ActorSystem, cc: ControllerComponents)
                              (implicit ec: ExecutionContext) extends AbstractController(cc) {
   private val logger = Logger(getClass)
+
+  def create: Action[AnyContent] = Action.async { implicit request =>
+    logger.info("MainController#create")
+
+    appDAO.create().map { _ =>
+      Ok(Json.obj("success" -> true, "msg" -> "jnode schema successfully created."))
+    }
+  }
 
   /**
     * Action to create and instantiate the main application database. This creates the persistence layer and populates
@@ -29,31 +39,33 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
     *
     * @return An async action that resolves when the entire process is over.
     */
-  def create: Action[AnyContent] = Action.async { implicit request =>
-    logger.info("MainController#create")
+  def load: Action[AnyContent] = Action { implicit request =>
+    logger.info("MainController#load")
 
-    val creationResult = appDAO.create()
-    val browser = new JsoupBrowser()
+    actorSystem.scheduler.scheduleOnce(0.seconds)({
+      val browser = new JsoupBrowser()
 
-    creationResult.flatMap { _ =>
       var validPage = true
-      val processResults: mutable.Seq[Future[Unit]] = mutable.Seq.empty[Future[Unit]]
+      var i = 1
 
       while (validPage) {
-        val page = browser.get(s"http://j-archive.com/showgame.php?game_id=$i")
-        if (PageValidator.valid(page.root)) {
-          val execution = processPage(page)
+        val url = s"http://j-archive.com/showgame.php?game_id=$i"
+        logger.info(s"Processing $url")
 
-          processResults.+:(execution)
+        val page = browser.get(url)
+
+        if (PageValidator.valid(page.root)) {
+          processPage(page)
         } else {
+          logger.info(s"$url is an invalid page")
           validPage = false
         }
-      }
 
-      Future.sequence(processResults).map { _ =>
-        Ok("Complete")
+        i += 1
       }
-    }
+    })
+
+    Ok(Json.obj("success" -> true, "msg" -> "jnode populating started successfully."))
   }
 
   /**
