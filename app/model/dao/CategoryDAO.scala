@@ -9,12 +9,11 @@ import slick.jdbc.MySQLProfile.api._
 import scala.concurrent.Future
 
 /**
+  * A DAO to access Category information in the persistence layer.
   *
-  * @param dbConfigProvider
-  * @param ec
+  * @param dbConfigProvider An injected database provider to use slick database.
   */
 class CategoryDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)
-                           (implicit ec: ResourceExecutionContext)
     extends HasDatabaseConfigProvider[JdbcProfile]
     with AllDAO[Category]
     with InsertableDAO[Category]
@@ -23,31 +22,44 @@ class CategoryDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvid
     into ((category, id) => category.copy(id=id)))
 
   /**
+    * Provide all the categories in the database.
     *
-    * @return
+    * @return A future that resolves to the database categories.
     */
-  // TODO: This might be kinda large, will have to see about this.
   def all: Future[Iterable[Category]] = {
     db.run(Categories.result)
   }
 
   /**
+    * Inserts a category into the persistence layer.
     *
-    * @param cat
-    * @return A future that resolves with nothing when the operation is complete.
+    * @param category The category to insert.
+    * @return A future that resolves with the inserted category when the operation finishes.
     */
-  def insert(cat: Category): Future[Category] = {
-    val query = InsertCategoryQuery += cat
+  def insert(category: Category): Future[Category] = {
+    val query = InsertCategoryQuery += category
     db.run(query)
   }
 
   /**
+    * Lookup a category by its id.
     *
     * @param id The id of the object to lookup.
     * @return A future that resolves to the found object if applicable.
     */
   def lookup(id: Int): Future[Option[Category]] = {
     val query = Categories.filter(_.id === id).take(1).result.headOption
+    db.run(query)
+  }
+
+  /**
+    * Lookup a category by its text.
+    *
+    * @param text The category text to lookup.
+    * @return A future that resolves to the category if found.
+    */
+  def index(text: String): Future[Option[Category]] = {
+    val query = Categories.filter(_.text === text).take(1).result.headOption
     db.run(query)
   }
 }

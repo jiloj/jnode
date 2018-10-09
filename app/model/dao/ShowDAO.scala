@@ -12,11 +12,11 @@ import slick.jdbc.MySQLProfile.api._
 import scala.concurrent.Future
 
 /**
+  * A DAO to interface with shows in the persistence layer.
   *
-  * @param dbConfigProvider
-  * @param ec
+  * @param dbConfigProvider An injected database provider to use slick database.
   */
-class ShowDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)(implicit ec: ResourceExecutionContext)
+class ShowDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)
   extends HasDatabaseConfigProvider[JdbcProfile]
     with AllDAO[Show]
     with InsertableDAO[Show]
@@ -24,8 +24,9 @@ class ShowDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)(
   private val InsertShowQuery = Shows returning Shows.map(_.id) into ((show, id) => show.copy(id=id))
 
   /**
+    * Provide all shows in the persistence layer.
     *
-    * @return
+    * @return A future that resolves to the iterable of shows in the persistence layer.
     */
   def all: Future[Iterable[Show]] = {
     db.run(Shows.result)

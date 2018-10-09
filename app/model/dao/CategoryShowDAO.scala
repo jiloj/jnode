@@ -6,21 +6,23 @@ import play.api.db.slick.{DatabaseConfigProvider, HasDatabaseConfigProvider}
 import slick.jdbc.JdbcProfile
 import slick.jdbc.MySQLProfile.api._
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
+  * A DAO to interface with the CategoryShow persistence layer.
   *
-  * @param dbConfigProvider
-  * @param ec
+  * @param dbConfigProvider An injected database provider to use slick database.
   */
-class CategoryShowDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)(implicit ec: ResourceExecutionContext)
+class CategoryShowDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)
   extends HasDatabaseConfigProvider[JdbcProfile] {
   /**
+    * Inserts a CategoryShow (the relationship between a category and show into the persistence layer)
     *
-    * @param cs
+    * @param cs The category show relationship to insert.
     * @return A future that resolves with nothing when the operation is complete.
     */
   def insert(cs: CategoryShow): Future[Unit] = {
+    implicit val ec: ExecutionContext = db.ioExecutionContext
     val query = CategoryShows += cs
     db.run(query).map { _ => () }
   }

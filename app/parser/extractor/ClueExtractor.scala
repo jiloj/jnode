@@ -29,7 +29,7 @@ object ClueExtractor extends Extractor[Seq[Option[Clue]]] {
 
     if (roundType != 3) {
       val clueNodes = el >> "td.clue"
-      clueNodes.zipWithIndex.map(nodeToPossibleClue).toIndexedSeq
+      clueNodes.zipWithIndex.map(nodeToPossibleClue(roundType)).toIndexedSeq
     } else {
       finalRoundToPossibleClue(el)
     }
@@ -43,6 +43,7 @@ object ClueExtractor extends Extractor[Seq[Option[Clue]]] {
   private def finalRoundToPossibleClue(el: Element): Seq[Option[Clue]] = {
     val question = el >?> text("#clue_FJ")
     val answerJS = el >?> attr("onmouseover")("div[onmouseover][onclick]")
+    val round = 3
 
     val clue = for {
       q <- question
@@ -54,7 +55,7 @@ object ClueExtractor extends Extractor[Seq[Option[Clue]]] {
       answerDoc = browser.parseString(clean)
       a <- answerDoc >?> text("em[class]")
     } yield {
-      Clue(q, a, 0, -1)
+      Clue(q, a, 0, round)
     }
 
     IndexedSeq(clue)
@@ -66,13 +67,12 @@ object ClueExtractor extends Extractor[Seq[Option[Clue]]] {
     * @param clueNode The root node of the clue.
     * @return A possible clue created from the information in the root clue node.
     */
-  private def nodeToPossibleClue(tup: (Element, Int)): Option[Clue] = {
+  private def nodeToPossibleClue(round: Int)(tup: (Element, Int)): Option[Clue] = {
     val el = tup._1
     val idx = tup._2
 
     val question = el >?> text(".clue_text")
     val answerJS = el >?> attr("onmouseover")("div[onmouseover][onclick]")
-    val round = -1
 
     for {
       q <- question

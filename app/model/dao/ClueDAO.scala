@@ -9,11 +9,11 @@ import slick.jdbc.MySQLProfile.api._
 import scala.concurrent.Future
 
 /**
+  * A DAO to interface with the clues in the persistence layer.
   *
-  * @param dbConfigProvider
-  * @param ec
+  * @param dbConfigProvider An injected database provider to use slick database.
   */
-class ClueDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)(implicit ec: ResourceExecutionContext)
+class ClueDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)
   extends HasDatabaseConfigProvider[JdbcProfile]
     with InsertableDAO[Clue]
     with LookupableDAO[Clue]
@@ -21,9 +21,10 @@ class ClueDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)(
   private val InsertClueQuery = Clues returning Clues.map(_.id) into ((clue, id) => clue.copy(id=id))
 
   /**
+    * Inserts the provided clue into the persistence layer.
     *
-    * @param clue
-    * @return A future that resolves with nothing when the operation is complete.
+    * @param clue The clue to insert into the persistence layer.
+    * @return A future that resolves with inserted clue when the operation is complete.
     */
   def insert(clue: Clue): Future[Clue] = {
     val query = InsertClueQuery += clue
@@ -31,9 +32,10 @@ class ClueDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)(
   }
 
   /**
+    * Lookup a clue by its id.
     *
     * @param id The id of the object to lookup.
-    * @return A future that resolves to the found object if applicable.
+    * @return A future that resolves to the clue if found.
     */
   def lookup(id: Int): Future[Option[Clue]] = {
     val query = Clues.filter(_.id === id).take(1).result.headOption
@@ -41,16 +43,15 @@ class ClueDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)(
   }
 
   /**
+    * Provide all the clues in the persistence layer.
     *
-    * @return
+    * @return A future that resolves to an iterable of all clues in the persistence layer.
     */
-  // TODO: This might be kinda large, will have to see about this.
   def all: Future[Iterable[Clue]] = {
     db.run(Clues.result)
   }
 }
 
-// TODO: I am not sure if this information should be in the same file logically as the DAO.
 /**
   * The schema for a clue. This clue is the base and most important unit across the system.
   *

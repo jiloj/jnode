@@ -7,23 +7,22 @@ import model.dao._
 import net.ruippeixotog.scalascraper.browser.JsoupBrowser
 import net.ruippeixotog.scalascraper.model.Document
 import parser.extractor.{CategoryExtractor, ClueExtractor, ExtractorUtils, ShowExtractor}
-import parser.validator.PageValidator
 import play.api.Logger
 import play.api.libs.json.Json
 import play.api.mvc.{AbstractController, Action, AnyContent, ControllerComponents}
+import scala.language.postfixOps
 
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 /**
   *
-  * @param dbConfigProvider
-  * @param cc
   */
 class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: CategoryDAO, clueDAO: ClueDAO,
-                              categoryShowDAO: CategoryShowDAO, actorSystem: ActorSystem, cc: ControllerComponents)
+                              categoryShowDAO: CategoryShowDAO, val actorSystem: ActorSystem,
+                              cc: ControllerComponents)
                              (implicit ec: ExecutionContext) extends AbstractController(cc) {
-  private val logger = Logger(getClass)
+  private val logger = Logger("jnode")
 
   def create: Action[AnyContent] = Action.async { implicit request =>
     logger.info("MainController#create")
@@ -41,28 +40,24 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
     */
   def load: Action[AnyContent] = Action { implicit request =>
     logger.info("MainController#load")
+    logger.info("Starting indexing of j-archive data")
 
-    actorSystem.scheduler.scheduleOnce(0.seconds)({
-      val browser = new JsoupBrowser()
+    // TODO: this logic could be made a lot faster most likely. Although, I would have to be careful with category
+    // insertion.
+    actorSystem.scheduler.scheduleOnce(50 milliseconds)({
+      val maxPage = 10
 
-      var validPage = true
-      var i = 1
-
-      while (validPage) {
+      val futures = (1 to maxPage).map { i =>
         val url = s"http://j-archive.com/showgame.php?game_id=$i"
-        logger.info(s"Processing $url")
-
-        val page = browser.get(url)
-
-        if (PageValidator.valid(page.root)) {
+        AppController.pageRequest(url).flatMap { page =>
+          logger.debug(s"Beginning to process $url...")
           processPage(page)
-        } else {
-          logger.info(s"$url is an invalid page")
-          validPage = false
         }
-
-        i += 1
       }
+
+      val totalResult = Future.sequence(futures)
+      Await.result(totalResult, Duration.Inf)
+      logger.info("j-archive data indexing finished.")
     })
 
     Ok(Json.obj("success" -> true, "msg" -> "jnode populating started successfully."))
@@ -117,18 +112,20 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
   private def insertCategories(categories: Iterable[Option[Category]]): Map[Int, Future[Category]] = {
     categories.zipWithIndex.flatMap { case(opt, idx) =>
       opt.map { category =>
-        val x: Future[Category] = categoryDAO.lookup(category.id).flatMap { existingCategoryOpt =>
-          // TODO: I know for a fact this can be cleaned up.
-          existingCategoryOpt.map { existingCategory =>
-            Future {
-              existingCategory
+        AppController.synchronized {
+          val x: Future[Category] = categoryDAO.lookup(category.id).flatMap { existingCategoryOpt =>
+            // TODO: I know for a fact this can be cleaned up.
+            existingCategoryOpt.map { existingCategory =>
+              Future {
+                existingCategory
+              }
+            } getOrElse {
+              categoryDAO.insert(category)
             }
-          } getOrElse {
-            categoryDAO.insert(category)
           }
-        }
 
-        (idx, x)
+          (idx, x)
+        }
       }
     }.toMap
   }
@@ -164,6 +161,16 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
         val cs = CategoryShow(1, result.id, show.id)
         categoryShowDAO.insert(cs)
       }
+    }
+  }
+}
+
+object AppController {
+  private val browser = new JsoupBrowser()
+
+  private def pageRequest(url: String)(implicit ec: ExecutionContext): Future[Document] = {
+    Future {
+      browser.get(url)
     }
   }
 }

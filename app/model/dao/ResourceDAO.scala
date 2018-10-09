@@ -1,19 +1,6 @@
 package model.dao
 
-import akka.actor.ActorSystem
-import javax.inject.Inject
-import play.libs.concurrent.CustomExecutionContext
-
 import scala.concurrent.Future
-
-/**
-  * A custom execution context is to establish that blocking operations, such as data access, can be executed in a
-  * different context and thread pool than Play's ExecutionContext, which is used for CPU bound tasks such as rendering.
-  *
-  * @param actorSystem An akka actor system (collection of actors).
-  */
-class ResourceExecutionContext @Inject()(actorSystem: ActorSystem)
-  extends CustomExecutionContext(actorSystem,"resource.dispatcher")
 
 /**
   * The insertable requirement for a DAO.
