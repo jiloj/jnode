@@ -27,6 +27,8 @@ libraryDependencies += "mysql" % "mysql-connector-java" % "5.1.47"
 
 libraryDependencies += "net.ruippeixotog" %% "scala-scraper" % "2.1.0"
 
+libraryDependencies += "com.lightbend.akka" %% "akka-stream-alpakka-slick" % "1.0-M1"
+
 // The Play project itself
 lazy val root = (project in file("."))
   .enablePlugins(Common, PlayScala, GatlingPlugin)

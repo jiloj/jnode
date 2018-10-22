@@ -19,12 +19,12 @@ class CategoryShowDAO @Inject()(protected val dbConfigProvider: DatabaseConfigPr
     * Inserts a CategoryShow (the relationship between a category and show into the persistence layer)
     *
     * @param cs The category show relationship to insert.
-    * @return A future that resolves with nothing when the operation is complete.
+    * @return A future that resolves to the original CategoryShow reference when complete.
     */
-  def insert(cs: CategoryShow): Future[Unit] = {
+  def insert(cs: CategoryShow): Future[CategoryShow] = {
     implicit val ec: ExecutionContext = db.ioExecutionContext
     val query = CategoryShows += cs
-    db.run(query).map { _ => () }
+    db.run(query).map { _ => cs }
   }
 }
 

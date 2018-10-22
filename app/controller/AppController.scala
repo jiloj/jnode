@@ -1,29 +1,44 @@
 package controller
 
 import akka.actor.ActorSystem
+import akka.stream.ActorMaterializer
+import akka.stream.ThrottleMode.Shaping
 import javax.inject.Inject
 import model.base.{Category, CategoryShow, Clue, Show}
 import model.dao._
 import net.ruippeixotog.scalascraper.browser.JsoupBrowser
 import net.ruippeixotog.scalascraper.model.Document
-import parser.extractor.{CategoryExtractor, ClueExtractor, ExtractorUtils, ShowExtractor}
+import parser.extractor._
 import play.api.Logger
 import play.api.libs.json.Json
 import play.api.mvc.{AbstractController, Action, AnyContent, ControllerComponents}
-import scala.language.postfixOps
 
+import scala.language.postfixOps
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
+import akka.stream.scaladsl._
+import util.FutureUtil
+
+import scala.collection.mutable
 
 /**
-  *
+  * The application level controller. This controller handles overarching data processes, and is the usual entry point
+  * for writes into the db.
   */
 class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: CategoryDAO, clueDAO: ClueDAO,
-                              categoryShowDAO: CategoryShowDAO, val actorSystem: ActorSystem,
+                              categoryShowDAO: CategoryShowDAO, implicit val actorSystem: ActorSystem,
                               cc: ControllerComponents)
                              (implicit ec: ExecutionContext) extends AbstractController(cc) {
   private val logger = Logger("jnode")
+  private implicit val mat = ActorMaterializer()
 
+  private val insertedCategoriesCache = mutable.Map.empty[String, Future[Category]]
+
+  /**
+    * The create action for the main db. This creates the schema of this application.
+    *
+    * @return A future that resolves when the schema creation is finished.
+    */
   def create: Action[AnyContent] = Action.async { implicit request =>
     logger.info("MainController#create")
 
@@ -40,135 +55,177 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
     */
   def load: Action[AnyContent] = Action { implicit request =>
     logger.info("MainController#load")
-    logger.info("Starting indexing of j-archive data")
 
-    // TODO: this logic could be made a lot faster most likely. Although, I would have to be careful with category
-    // insertion.
-    actorSystem.scheduler.scheduleOnce(50 milliseconds)({
-      val maxPage = 10
+    // Parse the url arguments as required.
+    val end = request.getQueryString("end").getOrElse("0").toInt
+    val start = request.getQueryString("start").getOrElse("1").toInt
+    val per = request.getQueryString("per").getOrElse("1").toInt
+    val interval = request.getQueryString("interval").getOrElse("500").toInt
+    val buffer = request.getQueryString("buffer").getOrElse("3").toInt
 
-      val futures = (1 to maxPage).map { i =>
-        val url = s"http://j-archive.com/showgame.php?game_id=$i"
-        AppController.pageRequest(url).flatMap { page =>
-          logger.debug(s"Beginning to process $url...")
-          processPage(page)
+    insertedCategoriesCache.clear
+    val urls = (start to end).map(i => s"http://j-archive.com/showgame.php?game_id=$i")
+
+    Source(urls)
+      .throttle(per, interval.milliseconds, buffer, Shaping)
+
+      // Page extraction stage
+      .mapAsyncUnordered(AppController.DefaultParallelism) { url =>
+        logger.debug(url)
+
+        AppController.pageRequest(url).map(ExtractedPage.create)
+      }.recoverWithRetries(-1, { case _ => Source.empty }).log("HTTP Requests")
+
+      // Show insertion stage
+      .mapAsync(AppController.DefaultParallelism) { page =>
+        val fut = insertShow(page.show)
+        FutureUtil.tuplify(fut, page)
+      }.log("Shows")
+
+      // Category insertion stage
+      .mapAsync(AppController.DefaultParallelism) { case(show, page) =>
+        val categoryInsertResults = insertCategories(page.categories)
+
+        val insertedCategories = Future.traverse(categoryInsertResults) { case (k, f) =>
+          f.map(k -> _)
+        }.map(_.toMap)
+        FutureUtil.tuplify(insertedCategories, (show, page))
+      }.log("Categories")
+
+      // Clue insertion stage
+      .mapAsync(AppController.DefaultParallelism) { case (categories, (show, page)) =>
+        val clueInsertResults = insertClues(page.clues, categories, show)
+
+        FutureUtil.mapping(clueInsertResults).map { _ =>
+          (categories, show)
         }
-      }
+      }.log("Clues")
 
-      val totalResult = Future.sequence(futures)
-      Await.result(totalResult, Duration.Inf)
-      logger.info("j-archive data indexing finished.")
-    })
+      // CategoryShow insertion stage and sink
+      .runWith(Sink.foreachParallel(AppController.DefaultParallelism) { case (categories, show) =>
+        val categoryShowInsertResults = insertCategoryShows(show, categories)
+
+        FutureUtil.mapping(categoryShowInsertResults)
+      })
 
     Ok(Json.obj("success" -> true, "msg" -> "jnode populating started successfully."))
   }
 
   /**
+    * Inserts the provided show object into the database.
     *
-    * @param doc
+    * @param show The show to insert.
+    * @return A future that resolves to the inserted show.
     */
-  def processPage(doc: Document): Future[Unit] = {
-    val showOpen = ShowExtractor.extract(doc.root)
-    val showResult = showDAO.insert(showOpen)
-
-    val extractedRounds = List(
-      ExtractorUtils.extractRound(doc, 1),
-      ExtractorUtils.extractRound(doc, 2),
-      ExtractorUtils.extractRound(doc, 3)
-    )
-
-    // Insertion for the rounds will be dependent on the foreign key relationships. First is category, then
-    // categoryshow, then clues.Show has already been inserted. Once finished, the ids can be associated and the results
-    // rewritten with the proper relationships.
-    val futures = for {
-      (extractedRound, idx) <- extractedRounds.zipWithIndex
-      round <- extractedRound
-    } yield {
-      // Extract all the info from the web page.
-      val categoriesOpen = CategoryExtractor.extract(round)
-      val cluesOpen = ClueExtractor.extract(round)
-
-      val categoriesResult = insertCategories(categoriesOpen)
-
-      showResult.flatMap { show =>
-        val clueInserts = insertClues(cluesOpen, categoriesResult, idx + 1, show).flatten
-        val csInserts = insertCategoryShows(categoriesResult.values, show)
-
-        Future.sequence(clueInserts ++ csInserts)
-      }
-    }
-
-    // TODO: How to improve this?
-    Future.sequence(futures).map { _ =>
-      ()
-    }
+  def insertShow(show: Show): Future[Show] = {
+    showDAO.insert(show)
   }
 
   /**
+    * Inserts the provided categories into the database.
     *
-    * @param categories
-    * @return
+    * @param categoriesByRound The categories to insert into the database.
+    * @return A mapping from a round to a future that resolves to the inserted categories.
     */
-  private def insertCategories(categories: Iterable[Option[Category]]): Map[Int, Future[Category]] = {
-    categories.zipWithIndex.flatMap { case(opt, idx) =>
-      opt.map { category =>
+  def insertCategories(categoriesByRound: Map[Int, IndexedSeq[Option[Category]]]): Map[Int, Future[IndexedSeq[Option[Category]]]] = {
+    categoriesByRound.map { case(idx, roundCategories) =>
+      val categoryInserts = roundCategories.map { categoryOpt =>
         AppController.synchronized {
-          val x: Future[Category] = categoryDAO.lookup(category.id).flatMap { existingCategoryOpt =>
-            // TODO: I know for a fact this can be cleaned up.
-            existingCategoryOpt.map { existingCategory =>
-              Future {
-                existingCategory
+          categoryOpt match {
+            case Some(category) =>
+              val up = category.text.toUpperCase
+              val insertFut = if (!insertedCategoriesCache.contains(up))
+              {
+                val insert = categoryDAO.insert(category)
+                insertedCategoriesCache += up -> insert
+                insert
               }
-            } getOrElse {
-              categoryDAO.insert(category)
-            }
-          }
+              else
+              {
+                insertedCategoriesCache(up)
+              }
 
-          (idx, x)
+              insertFut.map(Some(_))
+
+            case None =>
+              Future.successful(None)
+          }
         }
       }
-    }.toMap
+
+      (idx, Future.sequence(categoryInserts toIndexedSeq))
+    }
   }
 
   /**
+    * Insert the provided clues in to the database.
     *
-    * @param clues
-    * @param categories
-    * @param round
-    * @param show
+    * @param cluesByRound The clues to insert.
+    * @param categoriesByRound The already inserted category references to link to the inserted clues.
+    * @param show The inserted show reference to link to the inserted clues.
+    * @return A mapping from round to future that resolves to the inserted clues.
     */
-  private def insertClues(clues: Iterable[Option[Clue]], categories: Map[Int, Future[Category]], round: Int,
-                          show: Show): Iterable[Option[Future[Clue]]] = {
-    clues.zipWithIndex.map { case (clueOpt, idx) =>
-      clueOpt.flatMap { clue =>
-        val possibleFuture = categories.get(idx % 6)
-
-        possibleFuture.map { future =>
-          future.flatMap { category =>
-            val closedClue = clue.copy(round = round, categoryid = category.id, showid = show.id)
-            clueDAO.insert(closedClue)
-          }
+  def insertClues(cluesByRound: Map[Int, IndexedSeq[Option[Clue]]],
+                  categoriesByRound: Map[Int, IndexedSeq[Option[Category]]],
+                  show: Show): Map[Int, Future[Iterable[Option[Clue]]]] = {
+    cluesByRound.map { case(round, roundClues) =>
+      val clueInserts = roundClues.zipWithIndex.map { case(clueOpt, idx) =>
+        val insert = for {
+          clue <- clueOpt
+          possibleCategory = categoriesByRound(round)(idx % 6)
+          category <- possibleCategory
+        } yield {
+          val closedClue = clue.copy(round = 0, categoryid = category.id, showid = show.id)
+          clueDAO.insert(closedClue)
         }
+
+        FutureUtil.reverseOptionFuture(insert)
       }
+
+      (round, Future.sequence(clueInserts))
     }
   }
 
-  // TODO: Should this take iterable of future, or iterable of category.
-  // TODO: Make all methods parallel in returning something.
-  private def insertCategoryShows(categoryResults: Iterable[Future[Category]], show: Show): Iterable[Future[Unit]] = {
-    categoryResults.map { category =>
-      category.flatMap { result =>
-        val cs = CategoryShow(1, result.id, show.id)
-        categoryShowDAO.insert(cs)
+  /**
+    * Insert the CategoryShow instances of a j-archive game.
+    *
+    * @param show The inserted show reference.
+    * @param categories The inserted category references by round.
+    * @return The inserted CategoryShow references by round.
+    */
+  def insertCategoryShows(show: Show, categories: Map[Int, Iterable[Option[Category]]]): Map[Int, Future[Iterable[Option[CategoryShow]]]] = {
+    categories.map { case (round, roundCategories) =>
+      val categoryShowInserts = roundCategories.map { categoryOpt =>
+        val opt = categoryOpt.map { category =>
+          val cs = CategoryShow(round, category.id, show.id)
+          categoryShowDAO.insert(cs)
+        }
+
+        FutureUtil.reverseOptionFuture(opt)
       }
+
+      (round, Future.sequence(categoryShowInserts))
     }
   }
+
 }
 
+/**
+  * Companion object for the AppController.
+  */
 object AppController {
-  private val browser = new JsoupBrowser()
+  private val DefaultParallelism = 4
 
+  /**
+    * An asynchronous request to request an HTTP page.
+    *
+    * @param url The url to make the request for.
+    * @param ec The execution context to make the request under.
+    * @return A Future that resolves to the retrieved document.
+    */
   private def pageRequest(url: String)(implicit ec: ExecutionContext): Future[Document] = {
+    val browser = new JsoupBrowser()
+
     Future {
       browser.get(url)
     }

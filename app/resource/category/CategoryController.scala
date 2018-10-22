@@ -15,7 +15,7 @@ import scala.concurrent.ExecutionContext
   */
 class CategoryController @Inject()(cc: CategoryControllerComponents)(implicit ec: ExecutionContext)
   extends CategoryBaseController(cc) {
-  private val logger = Logger(getClass)
+  private val logger = Logger("jnode")
 
   /**
     * The main index action. Provides all categories in the node.
