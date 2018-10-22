@@ -21,8 +21,6 @@ class ShowDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)
     with AllDAO[Show]
     with InsertableDAO[Show]
     with LookupableDAO[Show] {
-  private val InsertShowQuery = Shows returning Shows.map(_.id) into ((show, id) => show.copy(id=id))
-
   /**
     * Provide all shows in the persistence layer.
     *
@@ -39,8 +37,9 @@ class ShowDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)
     * @return A future that resolves with nothing when the operation is complete.
     */
   def insert(show: Show): Future[Show] = {
-    val query = InsertShowQuery += show
-    db.run(query)
+    implicit val ec = db.ioExecutionContext
+    val query = Shows += show
+    db.run(query).map { _ => show }
   }
 
   /**
@@ -67,10 +66,10 @@ class ShowSchema(tag: Tag) extends Table[Show](tag, "show") {
   )
 
   def airdate = column[LocalDate]("airdate", O.Unique)
-  def id = column[Int]("id", O.PrimaryKey, O.AutoInc)
+  def id = column[Int]("id", O.PrimaryKey)
   def * = (airdate, id) <> (Show.tupled, Show.unapply)
 
-  def idx = index("show_idx", airdate, unique = true)
+  def rawpage = foreignKey("show_rawpage_fk", id, RawPages)(_.id)
 }
 
 /**

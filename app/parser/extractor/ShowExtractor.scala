@@ -24,6 +24,11 @@ object ShowExtractor extends Extractor[Show] {
     val airdateRaw = title.split(" ").last
     val airdate = LocalDate.parse(airdateRaw, DateTimeFormatter.ISO_LOCAL_DATE)
 
-    Show(airdate)
+    val idMarker = "game_id"
+    val gameDynamics = el >> attr("src")(".game_dynamics")
+    val lastGameId = gameDynamics.lastIndexOf(idMarker)
+    val id = gameDynamics.substring(lastGameId + idMarker.length).toInt
+
+    Show(airdate, id)
   }
 }

@@ -4,7 +4,7 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.ThrottleMode.Shaping
 import javax.inject.Inject
-import model.base.{Category, CategoryShow, Clue, Show}
+import model.base._
 import model.dao._
 import net.ruippeixotog.scalascraper.browser.JsoupBrowser
 import net.ruippeixotog.scalascraper.model.Document
@@ -15,7 +15,7 @@ import play.api.mvc.{AbstractController, Action, AnyContent, ControllerComponent
 
 import scala.language.postfixOps
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionException, Future}
 import akka.stream.scaladsl._
 import util.FutureUtil
 
@@ -26,8 +26,8 @@ import scala.collection.mutable
   * for writes into the db.
   */
 class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: CategoryDAO, clueDAO: ClueDAO,
-                              categoryShowDAO: CategoryShowDAO, implicit val actorSystem: ActorSystem,
-                              cc: ControllerComponents)
+                              categoryShowDAO: CategoryShowDAO, rawPageDAO: RawPageDAO,
+                              implicit val actorSystem: ActorSystem, cc: ControllerComponents)
                              (implicit ec: ExecutionContext) extends AbstractController(cc) {
   private val logger = Logger("jnode")
   private implicit val mat = ActorMaterializer()
@@ -48,10 +48,52 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
   }
 
   /**
+    * Download the requested pages and insert the raw contents into the database for later parsing.
+    *
+    * @return Returns immediately and the processing continues in the background in a fire-and-forget manner.
+    */
+  def download: Action[AnyContent] = Action { implicit request =>
+    logger.info("MainController#download")
+
+    val end = request.getQueryString("end").getOrElse("0").toInt
+    val start = request.getQueryString("start").getOrElse("1").toInt
+    val per = request.getQueryString("per").getOrElse("1").toInt
+    val interval = request.getQueryString("interval").getOrElse("500").toInt
+    val buffer = request.getQueryString("buffer").getOrElse("3").toInt
+
+    actorSystem.scheduler.scheduleOnce(0 seconds) {
+      Source(start to end)
+        .throttle(per, interval.milliseconds, buffer, Shaping)
+
+        // J-archive download stage
+        .mapAsyncUnordered(AppController.IOTaskParallelism) { i =>
+          val url = s"http://j-archive.com/showgame.php?game_id=$i"
+          logger.info(url)
+
+          AppController.pageRequest(url).map { document =>
+            RawPage(document.toHtml, i)
+          }
+        }.recoverWithRetries(10, {
+          case _ =>
+            logger.info("Error")
+            Source.empty
+        }).log("HTTP Requests")
+
+        // DB insert stage.
+        .mapAsyncUnordered(AppController.DefaultParallelism) { rawPage =>
+          rawPageDAO.insert(rawPage)
+        }.log("inserting")
+        .runWith(Sink.ignore)
+    }
+
+    Ok(Json.obj("success" -> true, "msg" -> "jnode downloading started successfully"))
+  }
+
+  /**
     * Action to create and instantiate the main application database. This creates the persistence layer and populates
     * it by parsing the j-archive game pages.
     *
-    * @return An async action that resolves when the entire process is over.
+    * @return Returns immediately and the processing continues in the background in a fire-and-forget manner.
     */
   def load: Action[AnyContent] = Action { implicit request =>
     logger.info("MainController#load")
@@ -63,50 +105,48 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
     val interval = request.getQueryString("interval").getOrElse("500").toInt
     val buffer = request.getQueryString("buffer").getOrElse("3").toInt
 
-    insertedCategoriesCache.clear
-    val urls = (start to end).map(i => s"http://j-archive.com/showgame.php?game_id=$i")
-
-    Source(urls)
-      .throttle(per, interval.milliseconds, buffer, Shaping)
-
-      // Page extraction stage
-      .mapAsyncUnordered(AppController.DefaultParallelism) { url =>
-        logger.debug(url)
-
-        AppController.pageRequest(url).map(ExtractedPage.create)
-      }.recoverWithRetries(-1, { case _ => Source.empty }).log("HTTP Requests")
-
-      // Show insertion stage
-      .mapAsync(AppController.DefaultParallelism) { page =>
-        val fut = insertShow(page.show)
-        FutureUtil.tuplify(fut, page)
-      }.log("Shows")
-
-      // Category insertion stage
-      .mapAsync(AppController.DefaultParallelism) { case(show, page) =>
-        val categoryInsertResults = insertCategories(page.categories)
-
-        val insertedCategories = Future.traverse(categoryInsertResults) { case (k, f) =>
-          f.map(k -> _)
-        }.map(_.toMap)
-        FutureUtil.tuplify(insertedCategories, (show, page))
-      }.log("Categories")
-
-      // Clue insertion stage
-      .mapAsync(AppController.DefaultParallelism) { case (categories, (show, page)) =>
-        val clueInsertResults = insertClues(page.clues, categories, show)
-
-        FutureUtil.mapping(clueInsertResults).map { _ =>
-          (categories, show)
+    actorSystem.scheduler.scheduleOnce(0 seconds) {
+      Source(start to end)
+        .throttle(per, interval.milliseconds, buffer, Shaping)
+        .mapAsync(AppController.DefaultParallelism) { i =>
+          rawPageDAO.lookup(i).map { rawPageOpt =>
+            rawPageOpt.map { rawPage =>
+              ExtractedPage.create(AppController.parseString(rawPage.text))
+            } get
+          }
         }
-      }.log("Clues")
+        // Show insertion stage
+        .mapAsync(AppController.DefaultParallelism) { page =>
+          val fut = insertShow(page.show)
+          FutureUtil.tuplify(fut, page)
+        }.log("Shows")
 
-      // CategoryShow insertion stage and sink
-      .runWith(Sink.foreachParallel(AppController.DefaultParallelism) { case (categories, show) =>
-        val categoryShowInsertResults = insertCategoryShows(show, categories)
+        // Category insertion stage
+        .mapAsync(AppController.DefaultParallelism) { case(show, page) =>
+          val categoryInsertResults = insertCategories(page.categories)
 
-        FutureUtil.mapping(categoryShowInsertResults)
-      })
+          val insertedCategories = Future.traverse(categoryInsertResults) { case (k, f) =>
+            f.map(k -> _)
+          }.map(_.toMap)
+          FutureUtil.tuplify(insertedCategories, (show, page))
+        }.log("Categories")
+
+        // Clue insertion stage
+        .mapAsync(AppController.DefaultParallelism) { case (categories, (show, page)) =>
+          val clueInsertResults = insertClues(page.clues, categories, show)
+
+          FutureUtil.mapping(clueInsertResults).map { _ =>
+            (categories, show)
+          }
+        }.log("Clues")
+
+        // CategoryShow insertion stage and sink
+        .runWith(Sink.foreachParallel(AppController.DefaultParallelism) { case (categories, show) =>
+          val categoryShowInsertResults = insertCategoryShows(show, categories)
+
+          FutureUtil.mapping(categoryShowInsertResults)
+        })
+    }
 
     Ok(Json.obj("success" -> true, "msg" -> "jnode populating started successfully."))
   }
@@ -133,19 +173,27 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
         AppController.synchronized {
           categoryOpt match {
             case Some(category) =>
-              val up = category.text.toUpperCase
-              val insertFut = if (!insertedCategoriesCache.contains(up))
-              {
-                val insert = categoryDAO.insert(category)
-                insertedCategoriesCache += up -> insert
-                insert
-              }
-              else
-              {
-                insertedCategoriesCache(up)
+              val categoryFut = categoryDAO.index(category.text).flatMap {
+                case Some(insertedCategory) => Future.successful(insertedCategory)
+                case None =>
+                  val up = category.text.toUpperCase
+
+                  if (insertedCategoriesCache.contains(up))
+                  {
+                    insertedCategoriesCache(up)
+                  }
+                  else
+                  {
+                    val insert = categoryDAO.insert(category)
+                    insertedCategoriesCache += up -> insert
+                    insert.foreach { _ =>
+                      insertedCategoriesCache.remove(up)
+                    }
+                    insert
+                  }
               }
 
-              insertFut.map(Some(_))
+              categoryFut.map(Some(_))
 
             case None =>
               Future.successful(None)
@@ -215,6 +263,8 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
   */
 object AppController {
   private val DefaultParallelism = 4
+  private val IOTaskParallelism = 5
+  private val browser = new JsoupBrowser()
 
   /**
     * An asynchronous request to request an HTTP page.
@@ -224,10 +274,17 @@ object AppController {
     * @return A Future that resolves to the retrieved document.
     */
   private def pageRequest(url: String)(implicit ec: ExecutionContext): Future[Document] = {
-    val browser = new JsoupBrowser()
-
     Future {
       browser.get(url)
     }
+  }
+
+  /**
+    *
+    * @param text
+    * @return
+    */
+  private def parseString(text: String): Document = {
+    browser.parseString(text)
   }
 }

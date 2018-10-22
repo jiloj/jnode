@@ -52,7 +52,7 @@
   </appender>
 
   <logger name="play" level="INFO" />
-  <logger name="jnode" level="INFO" />
+  <logger name="jnode" level="DEBUG" />
 
   <root level="INFO">
     <appender-ref ref="ASYNCFILE" />

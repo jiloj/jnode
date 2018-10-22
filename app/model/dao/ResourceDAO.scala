@@ -12,7 +12,7 @@ trait InsertableDAO[A] {
     * Insert the relevant type into the persistence layer.
     *
     * @param obj The obj to insert into the persistence layer.
-    * @return A future that resolves with nothing when the operation is complete.
+    * @return A future that resolves with inserted item when the operation is complete.
     */
   def insert(obj: A): Future[A]
 }
