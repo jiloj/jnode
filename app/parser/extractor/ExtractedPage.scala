@@ -1,6 +1,7 @@
 package parser.extractor
 
-import model.base.{Category, Clue, Show}
+import model.base.{Category, Clue, RawPage, Show}
+import net.ruippeixotog.scalascraper.browser.JsoupBrowser
 import net.ruippeixotog.scalascraper.model.Document
 
 /**
@@ -17,14 +18,18 @@ case class ExtractedPage(show: Show, categories: Map[Int, IndexedSeq[Option[Cate
   * Companion object to actually create an ExtractedPage from a HTML document.
   */
 object ExtractedPage {
+  private val browser = new JsoupBrowser()
+
   /**
-    * Create an ExtractedPage reference from a HTML document.
+    * Create an ExtractedPage reference from a RawPage reference.
     *
-    * @param page The HTML page to extract the information from.
+    * @param rawPage The RawPage reference to parse.
     * @return The created ExtractedPage reference.
     */
-  def create(page: Document): ExtractedPage = {
-    val show = ShowExtractor.extract(page.root)
+  def create(rawPage: RawPage): ExtractedPage = {
+    val page = browser.parseString(rawPage.text)
+    val airdate = AirdateExtractor.extract(page.root)
+    val show = Show(airdate, rawPage.id)
 
     val extractedRounds = List(
       ExtractorUtils.extractRound(page, 1),

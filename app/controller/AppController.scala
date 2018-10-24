@@ -66,21 +66,19 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
         .throttle(per, interval.milliseconds, buffer, Shaping)
 
         // J-archive download stage
-        .mapAsyncUnordered(AppController.IOTaskParallelism) { i =>
+        .mapAsync(AppController.DefaultParallelism) { i =>
           val url = s"http://j-archive.com/showgame.php?game_id=$i"
-          logger.info(url)
-
           AppController.pageRequest(url).map { document =>
             RawPage(document.toHtml, i)
           }
-        }.recoverWithRetries(10, {
+        }.recoverWithRetries(-1, {
           case _ =>
             logger.info("Error")
             Source.empty
         }).log("HTTP Requests")
 
         // DB insert stage.
-        .mapAsyncUnordered(AppController.DefaultParallelism) { rawPage =>
+        .mapAsync(AppController.DefaultParallelism) { rawPage =>
           rawPageDAO.insert(rawPage)
         }.log("inserting")
         .runWith(Sink.ignore)
@@ -101,47 +99,45 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
     // Parse the url arguments as required.
     val end = request.getQueryString("end").getOrElse("0").toInt
     val start = request.getQueryString("start").getOrElse("1").toInt
-    val per = request.getQueryString("per").getOrElse("1").toInt
-    val interval = request.getQueryString("interval").getOrElse("500").toInt
-    val buffer = request.getQueryString("buffer").getOrElse("3").toInt
 
     actorSystem.scheduler.scheduleOnce(0 seconds) {
       Source(start to end)
-        .throttle(per, interval.milliseconds, buffer, Shaping)
-        .mapAsync(AppController.DefaultParallelism) { i =>
+        .mapAsyncUnordered(AppController.IOTaskParallelism) { i =>
           rawPageDAO.lookup(i).map { rawPageOpt =>
             rawPageOpt.map { rawPage =>
-              ExtractedPage.create(AppController.parseString(rawPage.text))
-            } get
+              ExtractedPage.create(rawPage)
+            }
           }
-        }
+        }.async.log("Raw Pages")
+        .filter(_.isDefined).map(_.get)
+
         // Show insertion stage
-        .mapAsync(AppController.DefaultParallelism) { page =>
+        .mapAsyncUnordered(AppController.IOTaskParallelism) { page =>
           val fut = insertShow(page.show)
           FutureUtil.tuplify(fut, page)
-        }.log("Shows")
+        }.async.log("Shows")
 
         // Category insertion stage
-        .mapAsync(AppController.DefaultParallelism) { case(show, page) =>
+        .mapAsyncUnordered(AppController.IOTaskParallelism) { case(show, page) =>
           val categoryInsertResults = insertCategories(page.categories)
 
           val insertedCategories = Future.traverse(categoryInsertResults) { case (k, f) =>
             f.map(k -> _)
           }.map(_.toMap)
           FutureUtil.tuplify(insertedCategories, (show, page))
-        }.log("Categories")
+        }.async.log("Categories")
 
         // Clue insertion stage
-        .mapAsync(AppController.DefaultParallelism) { case (categories, (show, page)) =>
+        .mapAsyncUnordered(AppController.IOTaskParallelism) { case (categories, (show, page)) =>
           val clueInsertResults = insertClues(page.clues, categories, show)
 
           FutureUtil.mapping(clueInsertResults).map { _ =>
             (categories, show)
           }
-        }.log("Clues")
+        }.async.log("Clues")
 
         // CategoryShow insertion stage and sink
-        .runWith(Sink.foreachParallel(AppController.DefaultParallelism) { case (categories, show) =>
+        .runWith(Sink.foreachParallel(AppController.IOTaskParallelism) { case (categories, show) =>
           val categoryShowInsertResults = insertCategoryShows(show, categories)
 
           FutureUtil.mapping(categoryShowInsertResults)
@@ -263,7 +259,7 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
   */
 object AppController {
   private val DefaultParallelism = 4
-  private val IOTaskParallelism = 5
+  private val IOTaskParallelism = 10
   private val browser = new JsoupBrowser()
 
   /**
@@ -277,14 +273,5 @@ object AppController {
     Future {
       browser.get(url)
     }
-  }
-
-  /**
-    *
-    * @param text
-    * @return
-    */
-  private def parseString(text: String): Document = {
-    browser.parseString(text)
   }
 }
