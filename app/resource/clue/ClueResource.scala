@@ -6,6 +6,7 @@ import play.api.libs.json._
   * DTO for displaying clue information.
   *
   * @param id The clue id.
+  * @param category The category of the clue.
   * @param question The question of the clue. The prompt.
   * @param answer The answer of the clue. The response given by a player.
   * @param value The value of the clue. As usual this will be between 1 and 5 for clues in the jeopardy rounds and 0 for
@@ -13,7 +14,7 @@ import play.api.libs.json._
   * @param round The round that the clue appeared in. This is either 1, 2, or 3 corresponding with single, double, or
   *              final jeopardy.
   */
-case class ClueResource(id: Int, question: String, answer: String, value: Int, round: Int)
+case class ClueResource(id: Int, category: String, question: String, answer: String, value: Int, round: Int)
 
 /**
   * Companion object for a clue resource to define how it is written as a json object.
@@ -26,6 +27,7 @@ object ClueResource {
     def writes(clue: ClueResource): JsValue = {
       Json.obj(
         "id" -> clue.id,
+        "categoryid" -> clue.category,
         "question" -> clue.question,
         "answer" -> clue.answer,
         "value" -> clue.value,

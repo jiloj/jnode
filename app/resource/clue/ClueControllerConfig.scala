@@ -1,15 +1,15 @@
 package resource.clue
 
 import play.api.mvc.{DefaultActionBuilder, PlayBodyParsers}
-import resource.{RequestMarkerContext, ResourceActionBuilder, ResourceHandler}
+import resource.{AsyncResourceHandler, RequestMarkerContext, ResourceActionBuilder, ResourceHandler}
 import javax.inject.Inject
 import model.base.Clue
-import model.dao.ClueDAO
+import model.dao.{CategoryDAO, ClueDAO}
 import play.api.http.FileMimeTypes
 import play.api.i18n.{Langs, MessagesApi}
 import play.api.mvc._
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
   * Packages up the component dependencies for the clue controller. This minimizes the surface area exposed to the
@@ -17,6 +17,7 @@ import scala.concurrent.ExecutionContext
   */
 case class ClueControllerComponents @Inject()(clueActionBuilder: ResourceActionBuilder,
                                               clueDAO: ClueDAO,
+                                              categoryDAO: CategoryDAO,
                                               actionBuilder: DefaultActionBuilder,
                                               parsers: PlayBodyParsers,
                                               messagesApi: MessagesApi,
@@ -36,7 +37,7 @@ class ClueBaseController @Inject()(clueControllerComponents: ClueControllerCompo
   def ResourceAction: ResourceActionBuilder = clueControllerComponents.clueActionBuilder
 
   def resourceHandler: ResourceHandler[Clue, ClueResource] =
-    new ResourceHandler[Clue, ClueResource](clueControllerComponents.clueDAO, createClueResource)
+    new AsyncResourceHandler[Clue, ClueResource](clueControllerComponents.clueDAO, createClueResource)
 
   /**
     * Convert a database clue object to a clue resource for the controller.
@@ -44,7 +45,11 @@ class ClueBaseController @Inject()(clueControllerComponents: ClueControllerCompo
     * @param c The clue reference to convert.
     * @return The constructed clue resource.
     */
-  private def createClueResource(c: Clue): ClueResource = {
-    ClueResource(c.id, c.question, c.answer, c.value, c.round)
+  private def createClueResource(c: Clue): Future[ClueResource] = {
+    clueControllerComponents.categoryDAO.lookup(c.categoryid).map { categoryOpt =>
+      val categoryText = categoryOpt.get.text
+
+      ClueResource(c.id, categoryText, c.question, c.answer, c.value, c.round)
+    }
   }
 }

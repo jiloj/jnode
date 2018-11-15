@@ -25,7 +25,6 @@ class AppDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)
     */
   def create(): Future[Unit] = {
     val schemaCreation = DBIO.seq(
-      RawPages.schema.create,
       Shows.schema.create,
       Categories.schema.create,
       CategoryShows.schema.create,

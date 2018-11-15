@@ -174,19 +174,14 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
                 case None =>
                   val up = category.text.toUpperCase
 
-                  if (insertedCategoriesCache.contains(up))
-                  {
-                    insertedCategoriesCache(up)
-                  }
-                  else
-                  {
+                  insertedCategoriesCache.getOrElse(up, {
                     val insert = categoryDAO.insert(category)
                     insertedCategoriesCache += up -> insert
                     insert.foreach { _ =>
                       insertedCategoriesCache.remove(up)
                     }
                     insert
-                  }
+                  })
               }
 
               categoryFut.map(Some(_))
@@ -219,7 +214,7 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
           possibleCategory = categoriesByRound(round)(idx % 6)
           category <- possibleCategory
         } yield {
-          val closedClue = clue.copy(round = 0, categoryid = category.id, showid = show.id)
+          val closedClue = clue.copy(categoryid = category.id, showid = show.id)
           clueDAO.insert(closedClue)
         }
 
