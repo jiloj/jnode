@@ -10,12 +10,13 @@ import net.ruippeixotog.scalascraper.model.Element
   * Extract the clues from a j-archive round html element. These clues are extracted in order where the principal axis
   * is horizontal.
   */
-object ClueExtractor extends Extractor[Seq[Option[Clue]]] {
+object ClueExtractor extends Extractor[Map[(Int, Int), Option[Clue]]] {
+  // TODO: Look at policy regarding coordinates, regexes, and 1 or 0.
   private val browser = new JsoupBrowser()
-  // TODO: Make this more stringent or evaluate it's precision and recall
-  private val answerJSExtractor = "toggle\\('clue_.?J.*?', 'clue_.?J.*?', '(.+)'\\)".r
+  private val AnswerJSExtractor = "toggle\\('clue_([DF]?J|TB)(_(\\d)_(\\d))?', 'clue_\\1\\2?_stuck', '(.+)'\\)".r
+  private val AnswerJSExtractorPrefixGroup = 1
+  private val AnswerJSExtractorHtmlGroup = 5
 
-  // TODO: I do not currently extract any tie-breaker questions.
   /**
     * Extract the clues from the round. The clues are in order first going horizontally and then vertically. Clues may
     * not exist as well.
@@ -23,77 +24,71 @@ object ClueExtractor extends Extractor[Seq[Option[Clue]]] {
     * @param el The round html element to extract the clues from.
     * @return The sequence of extracted clues.
     */
-  def extract(el: Element): Seq[Option[Clue]] = {
-    // TODO: I'm assuming these are returned in order of the document.
-    val roundType = RoundTypeExtractor.extract(el)
+  def extract(el: Element): Map[(Int, Int), Option[Clue]] = {
+    val clueNodes = el >> "td.clue"
+    clueNodes.map { node =>
+      val pos = extractPositionFromClueNode(node)
+      val clue = nodeToPossibleClue(node)
 
-    if (roundType != 3) {
-      val clueNodes = el >> "td.clue"
-      clueNodes.zipWithIndex.map(nodeToPossibleClue(roundType)).toIndexedSeq
-    } else {
-      finalRoundToPossibleClue(el)
-    }
+      pos -> clue
+    }.toMap
   }
 
   /**
+    * Extract the position of an html clue node.
     *
-    * @param el
-    * @return
+    * @param el The clue html element to extract the position out of.
+    * @return The position within the round, or (0, 0) if the round is a singleton round or there was an error parsing.
     */
-  private def finalRoundToPossibleClue(el: Element): Seq[Option[Clue]] = {
-    val question = el >?> text("#clue_FJ")
-    val answerJS = el >?> attr("onmouseover")("div[onmouseover][onclick]")
-    val round = 3
+  private def extractPositionFromClueNode(el: Element): (Int, Int) = {
+    val answerJSOpt = el >?> attr("onmouseover")("div[onmouseover][onclick]")
 
-    val clue = for {
-      q <- question
-      js <- answerJS
-      mat <- answerJSExtractor.findFirstMatchIn(js)
-
-      answerHtml = mat.group(1)
-      clean = cleanAnswer(answerHtml)
-      answerDoc = browser.parseString(clean)
-      a <- answerDoc >?> text("em[class]")
+    val posOpt = for {
+      js <- answerJSOpt
+      mat <- AnswerJSExtractor.findFirstMatchIn(js)
     } yield {
-      Clue(q, a, 0, round)
+      val c = coordMatchToInt(mat.group(3))
+      val r = coordMatchToInt(mat.group(4))
+
+      (c, r)
     }
 
-    IndexedSeq(clue)
+    posOpt getOrElse {
+      (0, 0)
+    }
   }
 
   /**
-    * Create a possible clue from the root clue node in the table.
+    * Create a possible clue from the root clue html node in the table.
     *
-    * @param clueNode The root node of the clue.
+    * @param el The root node of the clue.
     * @return A possible clue created from the information in the root clue node.
     */
-  private def nodeToPossibleClue(round: Int)(tup: (Element, Int)): Option[Clue] = {
-    val el = tup._1
-    val idx = tup._2
-
-    val question = el >?> text(".clue_text")
-    val answerJS = el >?> attr("onmouseover")("div[onmouseover][onclick]")
+  private def nodeToPossibleClue(el: Element): Option[Clue] = {
+    val questionOpt = el >?> text(".clue_text")
+    val answerJSOpt = el >?> attr("onmouseover")("div[onmouseover][onclick]")
 
     for {
-      q <- question
-      js <- answerJS
-      mat <- answerJSExtractor.findFirstMatchIn(js)
+      q <- questionOpt
+      js <- answerJSOpt
+      mat <- AnswerJSExtractor.findFirstMatchIn(js)
 
-      answerHtml = mat.group(1)
+      answerHtml = mat.group(AnswerJSExtractorHtmlGroup)
       clean = cleanAnswer(answerHtml)
       answerDoc = browser.parseString(clean)
       a <- answerDoc >?> text("em[class]")
     } yield {
-      val v = (idx / 6) + 1
+      val round = prefixMatchToRound(mat.group(AnswerJSExtractorPrefixGroup))
+      val r = coordMatchToInt(mat.group(4))
 
-      Clue(q, a, v, round)
+      Clue(q, a, r, round)
     }
   }
 
   /**
-    * Clean up the answer value for extra html content.
+    * Clean up the answer value in the js string.
     *
-    * @param ans The answer value to clean up.
+    * @param ans The answer html in the js string to clean up.
     * @return The cleaned up answer content.
     */
   private def cleanAnswer(ans: String): String = {
@@ -104,5 +99,36 @@ object ClueExtractor extends Extractor[Seq[Option[Clue]]] {
     val lastBracket = if (lastTemp < 0) ans.length else lastTemp
 
     replaced.slice(firstBracket, lastBracket)
+  }
+
+  /**
+    * Converts a match of the clue coordinates to an integer. If there was no match on coordinates, (empty string), then
+    * simply return 0. This is because if there is no match, then this coordinate is non existent, whereas 1 is a valid
+    * coordinate.
+    *
+    * @param coordMatch The regex match for the coordinate of question.
+    * @return 0 if the match is empty, and the integer equivalent of the match otherwise.
+    */
+  private def coordMatchToInt(coordMatch: String): Int = {
+    if (coordMatch.isEmpty) {
+      0
+    } else {
+      coordMatch.toInt
+    }
+  }
+
+  /**
+    * Determine the round that the clue is found in from the match of the prefix label of the clue identifier.
+    *
+    * @param prefixMatch The prefix match of the clue identifier.
+    * @return The round number corresponding to the provided match.
+    */
+  private def prefixMatchToRound(prefixMatch: String): Int = {
+    prefixMatch match {
+      case s if s.startsWith("J") => 1
+      case s if s.startsWith("D") => 2
+      case s if s.startsWith("F") => 3
+      case "TB" => 4
+    }
   }
 }

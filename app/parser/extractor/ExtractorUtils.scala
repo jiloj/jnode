@@ -13,18 +13,17 @@ object ExtractorUtils {
     *
     * @param doc The document to extract the round out of.
     * @param round The round to extract out. 1 for single jeopardy, 2 for double jeopardy, and 3 for final jeopardy
-    *              including any sudden death questions.
-    * @return The corresponding round element out of the document if it existed.
+    *              which includes any sudden death questions.
+    * @return The table element for the round if found in the document.
     */
   def extractRound(doc: Document, round: Int): Option[Element] = {
-    val roundId = if (round == 1) {
-      "jeopardy_round"
-    } else if (round == 2) {
-      "double_jeopardy_round"
-    } else if (round == 3) {
-      "final_jeopardy_round"
+    // From the given round, setup the elements of the css selector to construct the appropriate query.
+    val (roundId, tableClass, index) = round match {
+      case 1 => ("jeopardy_round", "round", 1)
+      case 2 => ("double_jeopardy_round", "round", 1)
+      case 3 | 4 => ("final_jeopardy_round", "final_round", round - 2)
     }
 
-    doc >?> element("#" + roundId)
+    doc >?> element(s"#$roundId table.$tableClass:nth-child($index)")
   }
 }

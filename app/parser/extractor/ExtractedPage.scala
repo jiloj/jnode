@@ -9,10 +9,10 @@ import net.ruippeixotog.scalascraper.model.Document
   *
   * @param show The extracted show reference.
   * @param categories The extracted category references by round.
-  * @param clues The extracted clue references by round.
+  * @param clues The extracted clue references by round, and then by coordinate of the clue.
   */
 case class ExtractedPage(show: Show, categories: Map[Int, IndexedSeq[Option[Category]]],
-                         clues: Map[Int, IndexedSeq[Option[Clue]]])
+                         clues: Map[Int, Map[(Int, Int), Option[Clue]]])
 
 /**
   * Companion object to actually create an ExtractedPage from a HTML document.
@@ -41,14 +41,14 @@ object ExtractedPage {
       (roundOpt, idx) <- extractedRounds.zipWithIndex
       round <- roundOpt
     } yield {
-      (idx, CategoryExtractor.extract(round).toIndexedSeq)
+      (idx, CategoryExtractor.extract(round))
     }).toMap
 
     val clues = (for {
       (roundOpt, idx) <- extractedRounds.zipWithIndex
       round <- roundOpt
     } yield {
-      (idx, ClueExtractor.extract(round).toIndexedSeq)
+      (idx, ClueExtractor.extract(round))
     }).toMap
 
     ExtractedPage(show, categories, clues)
