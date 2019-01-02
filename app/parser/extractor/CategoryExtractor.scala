@@ -8,18 +8,16 @@ import net.ruippeixotog.scalascraper.model.Element
 /**
   * An extractor to remove all the categories of a j-archive round html element.
   */
-object CategoryExtractor extends Extractor[Seq[Option[Category]]] {
+object CategoryExtractor extends Extractor[IndexedSeq[Option[Category]]] {
   /**
     * Extract all the categories in order in which they appear.
     *
     * @param el The round element to extract the categories from. Some categories may not exist.
     * @return The sequence of categories in this round.
     */
-  def extract(el: Element): Seq[Option[Category]] = {
+  def extract(el: Element): IndexedSeq[Option[Category]] = {
     val categories = el >> texts(".category_name")
-
-    // TODO: Should check if this can be just seq or should really be IndexedSeq
-    categories.map(textToPossibleCategory).toSeq
+    categories.map(textToPossibleCategory).toIndexedSeq
   }
 
   /**

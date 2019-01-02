@@ -10,11 +10,14 @@ import net.ruippeixotog.scalascraper.model.Element
   * Extract the clues from a j-archive round html element. These clues are extracted in order where the principal axis
   * is horizontal.
   */
-object ClueExtractor extends Extractor[Map[(Int, Int), Option[Clue]]] {
+object ClueExtractor extends Extractor[Map[(Int, Int), Clue]] {
   // TODO: Look at policy regarding coordinates, regexes, and 1 or 0.
   private val browser = new JsoupBrowser()
+
   private val AnswerJSExtractor = "toggle\\('clue_([DF]?J|TB)(_(\\d)_(\\d))?', 'clue_\\1\\2?_stuck', '(.+)'\\)".r
   private val AnswerJSExtractorPrefixGroup = 1
+  private val AnswerJSExtractorColumnGroup = 3
+  private val AnswerJSExtractorRowGroup = 4
   private val AnswerJSExtractorHtmlGroup = 5
 
   /**
@@ -24,37 +27,92 @@ object ClueExtractor extends Extractor[Map[(Int, Int), Option[Clue]]] {
     * @param el The round html element to extract the clues from.
     * @return The sequence of extracted clues.
     */
-  def extract(el: Element): Map[(Int, Int), Option[Clue]] = {
-    val clueNodes = el >> "td.clue"
-    clueNodes.map { node =>
-      val pos = extractPositionFromClueNode(node)
-      val clue = nodeToPossibleClue(node)
+  def extract(el: Element): Map[(Int, Int), Clue] = {
+    val roundIdOpt = determineRound(el)
 
-      pos -> clue
-    }.toMap
+    roundIdOpt match {
+      case None => Map.empty[(Int, Int), Clue]
+      case Some(roundId) =>
+        val singleton = roundId >= 3
+
+        if (singleton) {
+          singletonRoundParse(el)
+        } else {
+          roundParse(el)
+        }
+    }
   }
 
   /**
-    * Extract the position of an html clue node.
+    * Parse a normal jeopardy or double jeopardy round.
+    *
+    * @param roundEl The normal round html element. This is at the table level.
+    * @return The map from coordinates to clues.
+    */
+  private def roundParse(roundEl: Element): Map[(Int, Int), Clue] = {
+    val clueNodes = roundEl >> "td.clue"
+
+    clueNodes.map { node =>
+      val posOpt = extractPositionFromClueNode(node)
+      val clueOpt = nodeToPossibleClue(node)
+      for {
+        pos <- posOpt
+        clue <- clueOpt
+      } yield {
+        pos -> clue
+      }
+    }.filter(_.isDefined).map(_.get).toMap
+  }
+
+  /**
+    * Creates the parsed result of the singleton round.
+    * @param roundEl
+    * @return A parsed result of the singleton round.
+    */
+  private def singletonRoundParse(roundEl: Element): Map[(Int, Int), Clue] = {
+    val clueOpt = nodeToPossibleClue(roundEl, true)
+
+    clueOpt match {
+      case Some(clue) => Seq((0, 0) -> clue).toMap
+      case None => Map.empty[(Int, Int), Clue]
+    }
+  }
+
+  /**
+    * Determine the round id corresponding to the provided round element.
+    *
+    * @param roundEl The element corresponding to the round we want the id of.
+    * @return The round id corresponding to the given element.
+    */
+  private def determineRound(roundEl: Element): Option[Int] = {
+    val answerJSOpt = extractAnswerJsFromElement(roundEl)
+
+    for {
+      answerJS <- answerJSOpt
+      mat <- AnswerJSExtractor.findFirstMatchIn(answerJS)
+    } yield {
+      prefixMatchToRound(mat.group(AnswerJSExtractorPrefixGroup))
+    }
+  }
+
+  /**
+    * Extract the position of an html clue node. If the element does not have any content, then no position is returned.
     *
     * @param el The clue html element to extract the position out of.
-    * @return The position within the round, or (0, 0) if the round is a singleton round or there was an error parsing.
+    * @return The position within the round, or (0, 0) if the round is a singleton round.
     */
-  private def extractPositionFromClueNode(el: Element): (Int, Int) = {
-    val answerJSOpt = el >?> attr("onmouseover")("div[onmouseover][onclick]")
+  private def extractPositionFromClueNode(el: Element): Option[(Int, Int)] = {
+    val answerJSOpt = extractAnswerJsFromElement(el)
 
-    val posOpt = for {
+    // TODO: run test later to see if all clues answer js fields match this regex
+    for {
       js <- answerJSOpt
       mat <- AnswerJSExtractor.findFirstMatchIn(js)
     } yield {
-      val c = coordMatchToInt(mat.group(3))
-      val r = coordMatchToInt(mat.group(4))
+      val c = coordMatchToInt(mat.group(AnswerJSExtractorColumnGroup))
+      val r = coordMatchToInt(mat.group(AnswerJSExtractorRowGroup))
 
       (c, r)
-    }
-
-    posOpt getOrElse {
-      (0, 0)
     }
   }
 
@@ -64,9 +122,9 @@ object ClueExtractor extends Extractor[Map[(Int, Int), Option[Clue]]] {
     * @param el The root node of the clue.
     * @return A possible clue created from the information in the root clue node.
     */
-  private def nodeToPossibleClue(el: Element): Option[Clue] = {
+  private def nodeToPossibleClue(el: Element, singleton: Boolean = false): Option[Clue] = {
     val questionOpt = el >?> text(".clue_text")
-    val answerJSOpt = el >?> attr("onmouseover")("div[onmouseover][onclick]")
+    val answerJSOpt = extractAnswerJsFromElement(el)
 
     for {
       q <- questionOpt
@@ -79,10 +137,21 @@ object ClueExtractor extends Extractor[Map[(Int, Int), Option[Clue]]] {
       a <- answerDoc >?> text("em[class]")
     } yield {
       val round = prefixMatchToRound(mat.group(AnswerJSExtractorPrefixGroup))
-      val r = coordMatchToInt(mat.group(4))
+      val r = if (singleton) 0 else coordMatchToInt(mat.group(AnswerJSExtractorRowGroup))
 
       Clue(q, a, r, round)
     }
+  }
+
+  /**
+    * Extracts the javascript related to the answer for the given element.
+    *
+    * @param node The node element that corresponds to a clue. This can be a table cell or a singleton table. It simply
+    *             has to have an element with an onmouseover and onclick attribute.
+    * @return The first js related to showing the answer available.
+    */
+  private def extractAnswerJsFromElement(node: Element): Option[String] = {
+    node >?> attr("onmouseover")("div[onmouseover][onclick]")
   }
 
   /**

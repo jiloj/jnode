@@ -2,7 +2,6 @@ package parser.extractor
 
 import model.base.{Category, Clue, RawPage, Show}
 import net.ruippeixotog.scalascraper.browser.JsoupBrowser
-import net.ruippeixotog.scalascraper.model.Document
 
 /**
   * An abstraction over the different extractions out of j-archive page.
@@ -12,7 +11,7 @@ import net.ruippeixotog.scalascraper.model.Document
   * @param clues The extracted clue references by round, and then by coordinate of the clue.
   */
 case class ExtractedPage(show: Show, categories: Map[Int, IndexedSeq[Option[Category]]],
-                         clues: Map[Int, Map[(Int, Int), Option[Clue]]])
+                         clues: Map[Int, Map[(Int, Int), Clue]])
 
 /**
   * Companion object to actually create an ExtractedPage from a HTML document.
@@ -41,14 +40,14 @@ object ExtractedPage {
       (roundOpt, idx) <- extractedRounds.zipWithIndex
       round <- roundOpt
     } yield {
-      (idx, CategoryExtractor.extract(round))
+      (idx + 1, CategoryExtractor.extract(round))
     }).toMap
 
     val clues = (for {
       (roundOpt, idx) <- extractedRounds.zipWithIndex
       round <- roundOpt
     } yield {
-      (idx, ClueExtractor.extract(round))
+      (idx + 1, ClueExtractor.extract(round))
     }).toMap
 
     ExtractedPage(show, categories, clues)
