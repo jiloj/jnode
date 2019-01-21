@@ -6,7 +6,7 @@ import model.dao.ShowDAO
 import play.api.http.FileMimeTypes
 import play.api.i18n.{Langs, MessagesApi}
 import play.api.mvc.{BaseController, ControllerComponents, DefaultActionBuilder, PlayBodyParsers}
-import resource.{RequestMarkerContext, ResourceActionBuilder, ResourceHandler}
+import resource.{BaseResourceHandler, RequestMarkerContext, ResourceActionBuilder, ResourceHandler}
 
 import scala.concurrent.ExecutionContext
 
@@ -34,13 +34,13 @@ class ShowBaseController @Inject()(showControllerComponents: ShowControllerCompo
 
   def ResourceAction: ResourceActionBuilder = showControllerComponents.showActionBuilder
 
-  def resourceHandler: ResourceHandler[Show, ShowResource] =
+  def resourceHandler: BaseResourceHandler[Show, ShowResource] =
     new ResourceHandler[Show, ShowResource](showControllerComponents.showDAO, createShowResource)
 
   /**
     * Convert a database show object to a show resource for the controller.
     *
-    * @param c The show reference to convert.
+    * @param s The show reference to convert.
     * @return The constructed show resource.
     */
   private def createShowResource(s: Show): ShowResource = {

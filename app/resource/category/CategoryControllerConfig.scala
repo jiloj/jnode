@@ -6,7 +6,7 @@ import model.dao.CategoryDAO
 import play.api.http.FileMimeTypes
 import play.api.i18n.{Langs, MessagesApi}
 import play.api.mvc.{BaseController, ControllerComponents, DefaultActionBuilder, PlayBodyParsers}
-import resource.{RequestMarkerContext, ResourceActionBuilder, ResourceHandler}
+import resource.{BaseResourceHandler, RequestMarkerContext, ResourceActionBuilder, ResourceHandler}
 
 import scala.concurrent.ExecutionContext
 
@@ -34,7 +34,7 @@ class CategoryBaseController @Inject()(categoryControllerComponents: CategoryCon
 
   def ResourceAction: ResourceActionBuilder = categoryControllerComponents.categoryActionBuilder
 
-  def resourceHandler: ResourceHandler[Category, CategoryResource] =
+  def resourceHandler: BaseResourceHandler[Category, CategoryResource] =
     new ResourceHandler[Category, CategoryResource](categoryControllerComponents.categoryDAO, createClueResource)
 
   /**

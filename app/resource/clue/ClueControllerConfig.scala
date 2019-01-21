@@ -1,7 +1,7 @@
 package resource.clue
 
 import play.api.mvc.{DefaultActionBuilder, PlayBodyParsers}
-import resource.{AsyncResourceHandler, RequestMarkerContext, ResourceActionBuilder, ResourceHandler}
+import resource._
 import javax.inject.Inject
 import model.base.Clue
 import model.dao.{CategoryDAO, ClueDAO}
@@ -36,7 +36,7 @@ class ClueBaseController @Inject()(clueControllerComponents: ClueControllerCompo
 
   def ResourceAction: ResourceActionBuilder = clueControllerComponents.clueActionBuilder
 
-  def resourceHandler: ResourceHandler[Clue, ClueResource] =
+  def resourceHandler: BaseResourceHandler[Clue, ClueResource] =
     new AsyncResourceHandler[Clue, ClueResource](clueControllerComponents.clueDAO, createClueResource)
 
   /**

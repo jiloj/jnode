@@ -11,7 +11,6 @@ import net.ruippeixotog.scalascraper.model.Element
   * is horizontal.
   */
 object ClueExtractor extends Extractor[Map[(Int, Int), Clue]] {
-  // TODO: Look at policy regarding coordinates, regexes, and 1 or 0.
   private val browser = new JsoupBrowser()
 
   private val AnswerJSExtractor = "toggle\\('clue_([DF]?J|TB)(_(\\d)_(\\d))?', 'clue_\\1\\2?_stuck', '(.+)'\\)".r

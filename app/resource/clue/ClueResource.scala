@@ -27,7 +27,7 @@ object ClueResource {
     def writes(clue: ClueResource): JsValue = {
       Json.obj(
         "id" -> clue.id,
-        "categoryid" -> clue.category,
+        "category" -> clue.category,
         "question" -> clue.question,
         "answer" -> clue.answer,
         "value" -> clue.value,

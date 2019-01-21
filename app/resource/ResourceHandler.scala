@@ -12,7 +12,7 @@ import scala.concurrent.{ExecutionContext, Future}
   * @tparam A The db model type that this handler takes in.
   * @tparam B The consumer resource type that this handler provides.
   */
-trait ResourceHandler[A, B] {
+trait BaseResourceHandler[A, B] {
   /**
     * Retrieve all the resources in the node in converted form.
     *
@@ -30,6 +30,42 @@ trait ResourceHandler[A, B] {
 }
 
 /**
+  *
+  * @param dao
+  * @param convert
+  * @param ec
+  * @tparam A The db model type that this handler takes in.
+  * @tparam B The consumer resource type that this handler provides.
+  */
+class ResourceHandler[A, B](dao: LookupableDAO[A] with AllDAO[A], convert: A => B)
+                           (implicit ec: ExecutionContext) extends BaseResourceHandler[A, B] {
+  /**
+    * Retrieve all the resources in the node in converted form.
+    *
+    * @return A future that resolves to the collection of resources.
+    */
+  def all: Future[Iterable[B]] = {
+    dao.all.map { objects =>
+      objects.map(convert(_))
+    }
+  }
+
+  /**
+    * Lookup a given resource by id and provide the converted form.
+    *
+    * @param id The id of the resource to lookup.
+    * @return A future that resolves to a resource option.
+    */
+  def lookup(id: Int): Future[Option[B]] = {
+    dao.lookup(id).map { opt =>
+      opt.map { res =>
+        convert(res)
+      }
+    }
+  }
+}
+
+/**
   * Controls access to the backend data resources handles that have been parsed and are apt for front-end consumption.
   * This resource conversion has an asynchronous nature to it and needs to be handled appropriately.
   *
@@ -40,7 +76,7 @@ trait ResourceHandler[A, B] {
   * @tparam B The consumer resource type that this handler provides.
   */
 class AsyncResourceHandler[A, B](dao: LookupableDAO[A] with AllDAO[A], convert: A => Future[B])
-                                (implicit ec: ExecutionContext) extends ResourceHandler[A, B] {
+                                (implicit ec: ExecutionContext) extends BaseResourceHandler[A, B] {
   /**
     * Retrieve all the resources in the node in converted form.
     *

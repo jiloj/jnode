@@ -33,7 +33,8 @@ object ExtractedPage {
     val extractedRounds = List(
       ExtractorUtils.extractRound(page, 1),
       ExtractorUtils.extractRound(page, 2),
-      ExtractorUtils.extractRound(page, 3)
+      ExtractorUtils.extractRound(page, 3),
+      ExtractorUtils.extractRound(page, 4)
     )
 
     val categories = (for {

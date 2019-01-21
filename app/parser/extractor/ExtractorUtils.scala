@@ -41,6 +41,7 @@ object ExtractorUtils {
       val s = els.size
       s == 6 || s == 1
     }
+
     result.isRight
   }
 }

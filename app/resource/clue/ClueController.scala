@@ -5,7 +5,7 @@ import play.api.Logger
 import play.api.libs.json.Json
 import play.api.mvc._
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 
 /**
   * Defines the logic for the actions that can be done on the clue resource.
@@ -15,7 +15,7 @@ import scala.concurrent.{ExecutionContext, Future}
   */
 class ClueController @Inject()(cc: ClueControllerComponents)(implicit ec: ExecutionContext)
     extends ClueBaseController(cc) {
-  private val logger = Logger(getClass)
+  private val logger = Logger("jnode")
 
   /**
     * The main index action. Provides all clues in the node.
@@ -25,10 +25,7 @@ class ClueController @Inject()(cc: ClueControllerComponents)(implicit ec: Execut
   def index: Action[AnyContent] = ResourceAction.async { implicit request =>
     logger.info("ClueController#index")
 
-    for {
-      clueResourceFutures <- resourceHandler.all
-      clueResources <- Future.sequence(clueResourceFutures)
-    } yield {
+    resourceHandler.all.map { clueResources =>
       Ok(Json.toJson(clueResources))
     }
   }
@@ -41,19 +38,12 @@ class ClueController @Inject()(cc: ClueControllerComponents)(implicit ec: Execut
     */
   def show(id: Int): Action[AnyContent] = ResourceAction.async { implicit request =>
     logger.info(s"ClueController#show: id = $id")
-    resourceHandler.
 
-    for {
-      clueResourceFuture <- resourceHandler.lookup(id)
-      clueResourceOpt <- clueResourceFuture
-    } yield {
-      clueResourceOpt match {
-        Some(clueResource) => Ok(Json.toJson(clueResource))
-        case None => NotFound(
-          Json.obj("code" -> 404, "msg" -> "No clue resource exists with given id.")
-        )
-
-      }
+    resourceHandler.lookup(id).map {
+      case Some(clueResource) => Ok(Json.toJson(clueResource))
+      case None => NotFound(
+        Json.obj("code" -> 404, "msg" -> "No clue resource exists with given id.")
+      )
     }
   }
 }

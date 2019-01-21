@@ -15,7 +15,7 @@ import play.api.mvc.{AbstractController, Action, AnyContent, ControllerComponent
 
 import scala.language.postfixOps
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, ExecutionException, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import akka.stream.scaladsl._
 import util.FutureUtil
 
@@ -43,6 +43,19 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
     logger.info("MainController#create")
 
     appDAO.create().map { _ =>
+      Ok(Json.obj("success" -> true, "msg" -> "jnode schema successfully created."))
+    }
+  }
+
+  def debug: Action[AnyContent] = Action.async {implicit request =>
+    rawPageDAO.lookup(2128).map { rawPageOpt =>
+      rawPageOpt.foreach { rawPage =>
+        val extractedPage = ExtractedPage.create(rawPage)
+
+        println(extractedPage.categories)
+        println(extractedPage.clues)
+      }
+
       Ok(Json.obj("success" -> true, "msg" -> "jnode schema successfully created."))
     }
   }
@@ -100,7 +113,7 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
     val end = request.getQueryString("end").getOrElse("0").toInt
     val start = request.getQueryString("start").getOrElse("1").toInt
 
-    actorSystem.scheduler.scheduleOnce(0 seconds) {
+    scheduleLongRunningTask {
       Source(start to end)
         .mapAsyncUnordered(AppController.IOTaskParallelism) { i =>
           rawPageDAO.lookup(i).map { rawPageOpt =>
@@ -129,7 +142,7 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
 
         // Clue insertion stage
         .mapAsyncUnordered(AppController.IOTaskParallelism) { case (categories, (show, page)) =>
-          val clueInsertResults = insertClues(page.clues, categories, show)
+          val clueInsertResults = insertClues(page.clues, categories, show, validClue)
 
           FutureUtil.mapping(clueInsertResults).map { _ =>
             (categories, show)
@@ -145,6 +158,16 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
     }
 
     Ok(Json.obj("success" -> true, "msg" -> "jnode populating started successfully."))
+  }
+
+  /**
+    * Validation for if a clue is valid. Not all parsed clues have valid data.
+    *
+    * @param clue The clue to be validated.
+    * @return True if the clue is valid and false otherwise.
+    */
+  def validClue(clue: Clue): Boolean = {
+    clue.answer != "=" && clue.answer != "?" && clue.question != "=" && clue.question != "?"
   }
 
   /**
@@ -199,20 +222,21 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
   /**
     * Insert the provided clues in to the database.
     *
-    * @param cluesByRound The clues to insert.
+    * @param cluesByRound The clues to insert by round and then by clue coordinate.
     * @param categoriesByRound The already inserted category references to link to the inserted clues.
     * @param show The inserted show reference to link to the inserted clues.
+    * @param pred A predicate to check if a clue is valid for insertion before actual insertion.
     * @return A mapping from round to future that resolves to the inserted clues.
     */
-  def insertClues(cluesByRound: Map[Int, IndexedSeq[Option[Clue]]],
+  private def insertClues(cluesByRound: Map[Int, Map[(Int, Int), Clue]],
                   categoriesByRound: Map[Int, IndexedSeq[Option[Category]]],
-                  show: Show): Map[Int, Future[Iterable[Option[Clue]]]] = {
+                  show: Show, pred: Clue => Boolean): Map[Int, Future[Iterable[Option[Clue]]]] = {
     cluesByRound.map { case(round, roundClues) =>
-      val clueInserts = roundClues.zipWithIndex.map { case(clueOpt, idx) =>
+      val clueInserts = roundClues.map { case(coord, clue) =>
+        val possibleCategory = categoriesByRound(round)(coord._1 - 1 max 0)
         val insert = for {
-          clue <- clueOpt
-          possibleCategory = categoriesByRound(round)(idx % 6)
           category <- possibleCategory
+          if pred(clue)
         } yield {
           val closedClue = clue.copy(categoryid = category.id, showid = show.id)
           clueDAO.insert(closedClue)
@@ -247,6 +271,14 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
     }
   }
 
+  /**
+    * Schedules a code block on a long running thread through the akka actor system.
+    *
+    * @param f The task to run in a long running thread.
+    */
+  private def scheduleLongRunningTask(f: => Unit) {
+    actorSystem.scheduler.scheduleOnce(0 seconds)(f)
+  }
 }
 
 /**

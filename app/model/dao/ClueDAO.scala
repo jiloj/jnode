@@ -69,8 +69,6 @@ class ClueSchema(tag: Tag) extends Table[Clue](tag, "clue") {
 
   def category = foreignKey("clue_category_fk", categoryid, Categories)(_.id)
   def show = foreignKey("clue_show_fk", showid, Shows)(_.id)
-
-  // TODO: Should there be some unique constraints on this?
 }
 
 /**

@@ -1,6 +1,7 @@
 GET        /create              controller.AppController.create
 GET        /load                controller.AppController.load
 GET        /download            controller.AppController.download
+GET        /debug               controller.AppController.debug
 
 ->         /clues               resource.clue.ClueRouter
 ->         /categories          resource.category.CategoryRouter

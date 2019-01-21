@@ -33,7 +33,16 @@ trait LookupableDAO[A] {
   def lookup(id: Int): Future[Option[A]]
 }
 
-
+/**
+  * The requirement that a DAO can provide all elements stored in its data layer.
+  *
+  * @tparam A The type that is stored in the data layer.
+  */
 trait AllDAO[A] {
+  /**
+    * Resolves to an iterable of the elements in the data layer.
+    *
+    * @return A future that resolves to the elements in the data layer.
+    */
   def all: Future[Iterable[A]]
 }
