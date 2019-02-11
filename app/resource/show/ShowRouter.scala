@@ -6,13 +6,15 @@ import play.api.routing.SimpleRouter
 import play.api.routing.sird._
 
 /**
+  * A simple router to convert HTTP actions to code.
   *
-  * @param controller
+  * @param controller The controller which has the actions to route to.
   */
 class ShowRouter @Inject()(controller: ShowController) extends SimpleRouter {
   /**
+    * The routing actions from HTTP requests to controller defined logic.
     *
-    * @return
+    * @return The actual Routes object.
     */
   override def routes: Routes = {
     case GET(p"/") =>

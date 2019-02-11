@@ -10,6 +10,11 @@ import play.api.routing.sird._
   * specific clue.
   */
 class ClueRouter @Inject()(controller: ClueController) extends SimpleRouter {
+  /**
+    * Defines the routing for clue resources, from urls to actions.
+    *
+    * @return The routing logic from HTTP actions to code.
+    */
   override def routes: Routes = {
     case GET(p"/") =>
       controller.index

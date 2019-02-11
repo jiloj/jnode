@@ -1,7 +1,7 @@
-GET        /create              controller.AppController.create
+GET        /initialize          controller.AppController.initialize
+GET        /recreate            controller.AppController.recreate
+GET        /reindex             controller.AppController.reindex
 GET        /load                controller.AppController.load
-GET        /download            controller.AppController.download
-GET        /debug               controller.AppController.debug
 
 ->         /clues               resource.clue.ClueRouter
 ->         /categories          resource.category.CategoryRouter

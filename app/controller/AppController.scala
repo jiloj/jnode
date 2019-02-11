@@ -11,7 +11,7 @@ import net.ruippeixotog.scalascraper.model.Document
 import parser.extractor._
 import play.api.Logger
 import play.api.libs.json.Json
-import play.api.mvc.{AbstractController, Action, AnyContent, ControllerComponents}
+import play.api.mvc._
 
 import scala.language.postfixOps
 import scala.concurrent.duration._
@@ -20,6 +20,7 @@ import akka.stream.scaladsl._
 import util.FutureUtil
 
 import scala.collection.mutable
+import scala.util.Success
 
 /**
   * The application level controller. This controller handles overarching data processes, and is the usual entry point
@@ -35,38 +36,27 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
   private val insertedCategoriesCache = mutable.Map.empty[String, Future[Category]]
 
   /**
-    * The create action for the main db. This creates the schema of this application.
+    * The main creation or initialization action for this service. This currently only creates the persistence layer
+    * schema.
     *
-    * @return A future that resolves when the schema creation is finished.
+    * @return A future that resolves when the app has finished initialization.
     */
-  def create: Action[AnyContent] = Action.async { implicit request =>
-    logger.info("MainController#create")
+  def initialize: Action[AnyContent] = Action.async { implicit request =>
+    logger.info("AppController#initialize")
 
-    appDAO.create().map { _ =>
-      Ok(Json.obj("success" -> true, "msg" -> "jnode schema successfully created."))
-    }
-  }
-
-  def debug: Action[AnyContent] = Action.async {implicit request =>
-    rawPageDAO.lookup(2128).map { rawPageOpt =>
-      rawPageOpt.foreach { rawPage =>
-        val extractedPage = ExtractedPage.create(rawPage)
-
-        println(extractedPage.categories)
-        println(extractedPage.clues)
-      }
-
-      Ok(Json.obj("success" -> true, "msg" -> "jnode schema successfully created."))
+    appDAO.initialize().map { _ =>
+      Ok(Json.obj("success" -> true, "msg" -> "jnode initialization finished."))
     }
   }
 
   /**
-    * Download the requested pages and insert the raw contents into the database for later parsing.
+    * Recreates the entire app. This is done in a fire and forget fashion, so the response is returned immediately
+    * even though processing is not.
     *
-    * @return Returns immediately and the processing continues in the background in a fire-and-forget manner.
+    * @return A successful response always if firing of the processing succeeds.
     */
-  def download: Action[AnyContent] = Action { implicit request =>
-    logger.info("MainController#download")
+  def recreate: Action[AnyContent] = Action { implicit request =>
+    logger.info("AppController#recreate")
 
     val end = request.getQueryString("end").getOrElse("0").toInt
     val start = request.getQueryString("start").getOrElse("1").toInt
@@ -74,6 +64,29 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
     val interval = request.getQueryString("interval").getOrElse("500").toInt
     val buffer = request.getQueryString("buffer").getOrElse("3").toInt
 
+    appDAO.recreate().andThen {
+      case Success(_) => download(start, end, per, interval, buffer)
+    }
+
+    Ok(Json.obj("success" -> true, "msg" -> "jnode downloading started successfully"))
+  }
+
+  /**
+    *
+    * @return
+    */
+  def reindex: Action[AnyContent] = Action { implicit request =>
+    logger.info("AppController#reindex")
+
+    Ok(Json.obj("success" -> true, "msg" -> "jnode schema successfully created."))
+  }
+
+  /**
+    * Download the requested pages and insert the raw contents into the database for later parsing.
+    *
+    * @return Returns immediately and the processing continues in the background in a fire-and-forget manner.
+    */
+  def download(start: Int, end: Int, per: Int, interval: Int, buffer: Int) {
     actorSystem.scheduler.scheduleOnce(0 seconds) {
       Source(start to end)
         .throttle(per, interval.milliseconds, buffer, Shaping)
@@ -96,8 +109,6 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
         }.log("inserting")
         .runWith(Sink.ignore)
     }
-
-    Ok(Json.obj("success" -> true, "msg" -> "jnode downloading started successfully"))
   }
 
   /**
@@ -290,7 +301,7 @@ object AppController {
   private val browser = new JsoupBrowser()
 
   /**
-    * An asynchronous request to request an HTTP page.
+    * An asynchronous request to an HTTP page.
     *
     * @param url The url to make the request for.
     * @param ec The execution context to make the request under.

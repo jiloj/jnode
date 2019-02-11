@@ -38,12 +38,13 @@ object FutureUtil {
   }
 
   /**
+    * Transforms a map of futures, into a future that resolves into a map.
     *
-    * @param map
-    * @param ec
-    * @tparam A
-    * @tparam B
-    * @return
+    * @param map The map of futures to convert.
+    * @param ec The execution context to operate with.
+    * @tparam A The type of the keys in the map.
+    * @tparam B The type of the values in the map.
+    * @return The converted map, as a future that resolves to the final map.
     */
   def mapping[A, B](map: Map[A, Future[B]])(implicit ec: ExecutionContext): Future[Map[A, B]] = {
     Future.traverse(map) { case (k, f) =>

@@ -17,20 +17,74 @@ import scala.concurrent.Future
 @Singleton
 class AppDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)
   extends HasDatabaseConfigProvider[JdbcProfile] {
+
   /**
-    * This creates the entire persistence layer. This method does not check if the persistence layer already exists.
-    * Therefore it should only be called if it does not currently exist.
     *
-    * @return A future that resolves when the creation operation is done.
     */
-  def create(): Future[Unit] = {
-    val schemaCreation = DBIO.seq(
+  private val SchemaCreation = DBIO.seq(
+      RawPages.schema.create,
       Shows.schema.create,
       Categories.schema.create,
       CategoryShows.schema.create,
       Clues.schema.create
-    )
+  )
 
-    db.run(schemaCreation)
+  /**
+    *
+    */
+  private val SchemaDeletion = DBIO.seq(
+    Clues.schema.drop,
+    CategoryShows.schema.drop,
+    Categories.schema.drop,
+    Shows.schema.drop,
+    RawPages.schema.drop
+  )
+
+  /**
+    *
+    */
+  private val IndexCreation = DBIO.seq(
+    Shows.schema.create,
+    Categories.schema.create,
+    CategoryShows.schema.create,
+    Clues.schema.create
+  )
+
+  /**
+    *
+    */
+  private val IndexDeletion = DBIO.seq(
+    Clues.schema.drop,
+    CategoryShows.schema.drop,
+    Categories.schema.drop,
+    Shows.schema.drop
+  )
+
+  /**
+    * This initializes the entire persistence layer. This method does not check if the persistence layer already exists.
+    * Therefore it should only be called once when the entire app is created.
+    *
+    * @return A future that resolves when the creation operation is done.
+    */
+  def initialize(): Future[Unit] = {
+    db.run(SchemaCreation)
+  }
+
+  /**
+    *
+    * @return
+    */
+  def recreate(): Future[Unit] = {
+    val actions = DBIO.seq(SchemaDeletion, SchemaCreation)
+    db.run(actions)
+  }
+
+  /**
+    *
+    * @return
+    */
+  def reindex(): Future[Unit] = {
+    val actions = DBIO.seq(IndexDeletion, IndexCreation)
+    db.run(actions)
   }
 }
