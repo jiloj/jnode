@@ -10,7 +10,7 @@ import scala.concurrent.Future
 
 /**
   * A DAO that holds static general operations to the persistence layer. These are not specific to a specific resource
-  * but to the entire application.
+  * but to managing the entire application.
   *
   * @param dbConfigProvider An injected database provider to use slick database.
   */
@@ -19,7 +19,7 @@ class AppDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)
   extends HasDatabaseConfigProvider[JdbcProfile] {
 
   /**
-    *
+    * Creates the initial schema. This goes along with app initialization.
     */
   private val SchemaCreation = DBIO.seq(
       RawPages.schema.create,
@@ -30,18 +30,18 @@ class AppDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)
   )
 
   /**
-    *
+    * Deletes the entire schema and data of the app.
     */
   private val SchemaDeletion = DBIO.seq(
-    Clues.schema.drop,
-    CategoryShows.schema.drop,
-    Categories.schema.drop,
-    Shows.schema.drop,
-    RawPages.schema.drop
+      Clues.schema.create,
+      CategoryShows.schema.create,
+      Categories.schema.create,
+      Shows.schema.create,
+      RawPages.schema.create
   )
 
   /**
-    *
+    * Creates the index part of the schema only. This excludes the raw downloaded pages.
     */
   private val IndexCreation = DBIO.seq(
     Shows.schema.create,
@@ -51,7 +51,7 @@ class AppDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)
   )
 
   /**
-    *
+    * Deletes the index part of the schema only. This excludes the raw downloaded pages.
     */
   private val IndexDeletion = DBIO.seq(
     Clues.schema.drop,
@@ -71,19 +71,21 @@ class AppDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)
   }
 
   /**
+    * Recreates the entire application persistence layer.
     *
-    * @return
+    * @return A future that resolves when the entire schema has been created again.
     */
-  def recreate(): Future[Unit] = {
+  def reinitialize(): Future[Unit] = {
     val actions = DBIO.seq(SchemaDeletion, SchemaCreation)
     db.run(actions)
   }
 
   /**
+    * Clears the index entirely. Leaves the raw pages intact.
     *
-    * @return
+    * @return A future that resolves when the index has been cleared and brought back to a clean state.
     */
-  def reindex(): Future[Unit] = {
+  def clear(): Future[Unit] = {
     val actions = DBIO.seq(IndexDeletion, IndexCreation)
     db.run(actions)
   }

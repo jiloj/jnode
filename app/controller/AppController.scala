@@ -20,7 +20,6 @@ import akka.stream.scaladsl._
 import util.FutureUtil
 
 import scala.collection.mutable
-import scala.util.Success
 
 /**
   * The application level controller. This controller handles overarching data processes, and is the usual entry point
@@ -39,7 +38,7 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
     * The main creation or initialization action for this service. This currently only creates the persistence layer
     * schema.
     *
-    * @return A future that resolves when the app has finished initialization.
+    * @return A future that resolves when the app has finished initialization of the persistence layer.
     */
   def initialize: Action[AnyContent] = Action.async { implicit request =>
     logger.info("AppController#initialize")
@@ -50,13 +49,38 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
   }
 
   /**
-    * Recreates the entire app. This is done in a fire and forget fashion, so the response is returned immediately
-    * even though processing is not.
+    * Reinitializes the application. This means that the entire peristence layer is cleared and recreated.
     *
-    * @return A successful response always if firing of the processing succeeds.
+    * @return A future that resolves when the entire instance is cleared.
     */
-  def recreate: Action[AnyContent] = Action { implicit request =>
-    logger.info("AppController#recreate")
+  def reinitialize: Action[AnyContent] = Action.async { implicit request =>
+    logger.info("AppController#reinitialize")
+
+    appDAO.reinitialize().map { _ =>
+      Ok(Json.obj("success" -> true, "msg" -> "jnode instance reinitialized."))
+    }
+  }
+
+  /**
+    * Clears the entire index on the application. This keeps the raw pages intact.
+    *
+    * @return A future that resolves when the index is cleared.
+    */
+  def clear: Action[AnyContent] = Action.async { implicit request =>
+    logger.info("AppController#clear")
+
+    appDAO.clear().map { _ =>
+      Ok(Json.obj("success" -> true, "msg" -> "jnode instance cleared."))
+    }
+  }
+
+  /**
+    * Fetches and downloads the content from j-archive. The application must be just created / blank if this run.
+    *
+    * @return Immediately returns a successful result since the download action is run as fire and forget.
+    */
+  def fetch: Action[AnyContent] = Action { implicit request =>
+    logger.info("AppController#fetch")
 
     val end = request.getQueryString("end").getOrElse("0").toInt
     val start = request.getQueryString("start").getOrElse("1").toInt
@@ -64,30 +88,39 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
     val interval = request.getQueryString("interval").getOrElse("500").toInt
     val buffer = request.getQueryString("buffer").getOrElse("3").toInt
 
-    appDAO.recreate().andThen {
-      case Success(_) => download(start, end, per, interval, buffer)
-    }
+    download(start, end, per, interval, buffer)
 
     Ok(Json.obj("success" -> true, "msg" -> "jnode downloading started successfully"))
   }
 
   /**
+    * Indexes the raw pages currently in the application. The index must be clear for this to run.
     *
-    * @return
+    * @return Immediately returns since the population of the index is run as fire and forget.
     */
-  def reindex: Action[AnyContent] = Action { implicit request =>
-    logger.info("AppController#reindex")
+  def index: Action[AnyContent] = Action { implicit request =>
+    logger.info("AppController#index")
 
-    Ok(Json.obj("success" -> true, "msg" -> "jnode schema successfully created."))
+    // Parse the url arguments as required.
+    val end = request.getQueryString("end").getOrElse("0").toInt
+    val start = request.getQueryString("start").getOrElse("1").toInt
+
+    populate(start, end)
+
+    Ok(Json.obj("success" -> true, "msg" -> "jnode indexing successfully created."))
   }
 
   /**
     * Download the requested pages and insert the raw contents into the database for later parsing.
     *
-    * @return Returns immediately and the processing continues in the background in a fire-and-forget manner.
+    * @param start The numeric id of the page to start downloading from. Inclusive.
+    * @param end The end page to stop downloading at. Inclusive.
+    * @param per The number of requests to perform at a time.
+    * @param interval The interval between requests.
+    * @param buffer The number of requests to keep in a buffer at a time.
     */
   def download(start: Int, end: Int, per: Int, interval: Int, buffer: Int) {
-    actorSystem.scheduler.scheduleOnce(0 seconds) {
+    scheduleLongRunningTask {
       Source(start to end)
         .throttle(per, interval.milliseconds, buffer, Shaping)
 
@@ -112,18 +145,12 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
   }
 
   /**
-    * Action to create and instantiate the main application database. This creates the persistence layer and populates
-    * it by parsing the j-archive game pages.
+    * This populates the index part of the application from the raw pages currently downloaded in the database.
     *
-    * @return Returns immediately and the processing continues in the background in a fire-and-forget manner.
+    * @param start The page to start indexing from. Inclusive.
+    * @param end The page to stop indexing at. Inclusive.
     */
-  def load: Action[AnyContent] = Action { implicit request =>
-    logger.info("MainController#load")
-
-    // Parse the url arguments as required.
-    val end = request.getQueryString("end").getOrElse("0").toInt
-    val start = request.getQueryString("start").getOrElse("1").toInt
-
+  def populate(start: Int, end: Int) {
     scheduleLongRunningTask {
       Source(start to end)
         .mapAsyncUnordered(AppController.IOTaskParallelism) { i =>
@@ -167,8 +194,6 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
           FutureUtil.mapping(categoryShowInsertResults)
         })
     }
-
-    Ok(Json.obj("success" -> true, "msg" -> "jnode populating started successfully."))
   }
 
   /**
