@@ -51,8 +51,8 @@
     <appender-ref ref="STDOUT" />
   </appender>
 
-  <logger name="play" level="INFO" />
-  <logger name="jnode" level="DEBUG" />
+  <logger name="play" />
+  <logger name="jnode" />
 
   <root level="INFO">
     <appender-ref ref="ASYNCFILE" />

@@ -33,11 +33,11 @@ class AppDAO @Inject()(protected val dbConfigProvider: DatabaseConfigProvider)
     * Deletes the entire schema and data of the app.
     */
   private val SchemaDeletion = DBIO.seq(
-      Clues.schema.create,
-      CategoryShows.schema.create,
-      Categories.schema.create,
-      Shows.schema.create,
-      RawPages.schema.create
+      Clues.schema.drop,
+      CategoryShows.schema.drop,
+      Categories.schema.drop,
+      Shows.schema.drop,
+      RawPages.schema.drop
   )
 
   /**

@@ -26,7 +26,13 @@ object ExtractorUtils {
 
     val roundEl = doc >?> element(s"#$roundId table.$tableClass:nth-of-type($index)")
 
-    roundEl.filter(validateRound)
+    val r = roundEl.filter(validateRound)
+
+    if (r.isEmpty) {
+      println(doc.location)
+    }
+
+    r
   }
 
   /**

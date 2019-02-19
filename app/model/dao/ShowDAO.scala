@@ -66,7 +66,7 @@ class ShowSchema(tag: Tag) extends Table[Show](tag, "show") {
   )
 
   def airdate = column[LocalDate]("airdate", O.Unique)
-  def id = column[Int]("id", O.PrimaryKey)
+  def id = column[Int]("id", O.Unique)
   def * = (airdate, id) <> (Show.tupled, Show.unapply)
 
   def rawpage = foreignKey("show_rawpage_fk", id, RawPages)(_.id)

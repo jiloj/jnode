@@ -49,7 +49,7 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
   }
 
   /**
-    * Reinitializes the application. This means that the entire peristence layer is cleared and recreated.
+    * Reinitializes the application. This means that the entire persistence layer is cleared and recreated.
     *
     * @return A future that resolves when the entire instance is cleared.
     */
@@ -57,7 +57,7 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
     logger.info("AppController#reinitialize")
 
     appDAO.reinitialize().map { _ =>
-      Ok(Json.obj("success" -> true, "msg" -> "jnode instance reinitialized."))
+      Ok(Json.obj("success" -> true, "msg" -> "jnode reinitialization finished."))
     }
   }
 
@@ -75,7 +75,9 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
   }
 
   /**
-    * Fetches and downloads the content from j-archive. The application must be just created / blank if this run.
+    * Fetches and downloads the content from j-archive. Note that the range of pages downloaded should have no
+    * intersection with the current downloaded pages. If this is the case please use `reinitialize`. This also will
+    * automatically put the index out of sync with the downloaded pages.
     *
     * @return Immediately returns a successful result since the download action is run as fire and forget.
     */
@@ -107,7 +109,7 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
 
     populate(start, end)
 
-    Ok(Json.obj("success" -> true, "msg" -> "jnode indexing successfully created."))
+    Ok(Json.obj("success" -> true, "msg" -> "jnode indexing successfully started."))
   }
 
   /**

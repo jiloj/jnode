@@ -1,6 +1,7 @@
 GET        /initialize          controller.AppController.initialize
 GET        /reinitialize        controller.AppController.reinitialize
 GET        /clear               controller.AppController.clear
+GET        /fetch               controller.AppController.fetch
 GET        /index               controller.AppController.index
 
 ->         /clues               resource.clue.ClueRouter
