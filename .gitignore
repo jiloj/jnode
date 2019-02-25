@@ -1,11 +1,18 @@
+# Folders
 build
 logs
 target
+out
 /.idea
 /.idea_modules
 /.classpath
 /.project
 /.settings
 /RUNNING_PID
-
 /.vscode
+
+
+# Files
+*.class
+.*.swp
+.DS_Store
