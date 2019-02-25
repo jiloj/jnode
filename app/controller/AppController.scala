@@ -103,11 +103,7 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
   def index: Action[AnyContent] = Action { implicit request =>
     logger.info("AppController#index")
 
-    // Parse the url arguments as required.
-    val end = request.getQueryString("end").getOrElse("0").toInt
-    val start = request.getQueryString("start").getOrElse("1").toInt
-
-    populate(start, end)
+    populate()
 
     Ok(Json.obj("success" -> true, "msg" -> "jnode indexing successfully started."))
   }
@@ -148,21 +144,15 @@ class AppController @Inject()(appDAO: AppDAO, showDAO: ShowDAO, categoryDAO: Cat
 
   /**
     * This populates the index part of the application from the raw pages currently downloaded in the database.
-    *
-    * @param start The page to start indexing from. Inclusive.
-    * @param end The page to stop indexing at. Inclusive.
     */
-  def populate(start: Int, end: Int) {
+  def populate() {
     scheduleLongRunningTask {
-      Source(start to end)
-        .mapAsyncUnordered(AppController.IOTaskParallelism) { i =>
-          rawPageDAO.lookup(i).map { rawPageOpt =>
-            rawPageOpt.map { rawPage =>
-              ExtractedPage.create(rawPage)
-            }
-          }
+      Source
+        .fromFuture(rawPageDAO.all)
+        .flatMapConcat(iter => Source.fromIterator(() => iter.iterator))
+        .map { rawPage =>
+          ExtractedPage.create(rawPage)
         }.async.log("Raw Pages")
-        .filter(_.isDefined).map(_.get)
 
         // Show insertion stage
         .mapAsyncUnordered(AppController.IOTaskParallelism) { page =>
