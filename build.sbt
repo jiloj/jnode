@@ -1,7 +1,5 @@
 import sbt.Keys._
 
-lazy val GatlingTest = config("gatling") extend Test
-
 scalaVersion in ThisBuild := "2.12.6"
 
 crossScalaVersions := Seq("2.11.12", "2.12.6")
@@ -19,8 +17,6 @@ libraryDependencies += "com.netaporter" %% "scala-uri" % "0.4.16"
 libraryDependencies += "net.codingwell" %% "scala-guice" % "4.2.1"
 
 libraryDependencies += "org.scalatestplus.play" %% "scalatestplus-play" % "3.1.2" % Test
-libraryDependencies += "io.gatling.highcharts" % "gatling-charts-highcharts" % gatlingVersion(scalaBinaryVersion.value) % Test
-libraryDependencies += "io.gatling" % "gatling-test-framework" % gatlingVersion(scalaBinaryVersion.value) % Test
 
 libraryDependencies += "com.typesafe.play" %% "play-slick" % "3.0.0"
 libraryDependencies += "mysql" % "mysql-connector-java" % "5.1.47"
@@ -32,17 +28,6 @@ libraryDependencies += "com.lightbend.akka" %% "akka-stream-alpakka-slick" % "1.
 // The Play project itself
 lazy val root = (project in file("."))
   .enablePlugins(Common, PlayScala, GatlingPlugin)
-  .configs(GatlingTest)
-  .settings(inConfig(GatlingTest)(Defaults.testSettings): _*)
   .settings(
-    name := """jnode""",
-    scalaSource in GatlingTest := baseDirectory.value / "/gatling/simulation"
-  )
-
-// Documentation for this project:
-//    sbt "project docs" "~ paradox"
-//    open docs/target/paradox/site/index.html
-lazy val docs = (project in file("docs")).enablePlugins(ParadoxPlugin).
-  settings(
-    paradoxProperties += ("download_url" -> "https://example.lightbend.com/v1/download/play-rest-api")
+    name := """jnode"""
   )
